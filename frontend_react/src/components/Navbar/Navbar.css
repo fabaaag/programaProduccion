@@ -1,0 +1,48 @@
+:root{
+    --background-color: #ffffff;
+    --text-color: #000000;
+}
+
+.dark{
+    --background-color: #1a1a1a;
+    --text-color: #f0f0f0;
+}
+
+.light{
+    --background-color: #ffffff;
+    --text-color: #000000;
+}
+
+.navbar{
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 7%;
+    transition: .5s;
+    background-color: var(--background-color);
+    color: var(--text-color);
+}
+.navbar .nv-logo-container{
+    display: flex;
+    align-items: center;
+    justify-content: left;
+    gap: 15px;
+    cursor: pointer;
+    color: #030303;
+}
+
+.navbar .logo{
+    width: 5%;
+}
+
+.toggle-icon{
+    width: 3%;
+    cursor: pointer;
+}
+
+
+.navbar.dark ul li:hover{
+    text-shadow: 1px 1px 1px gray;
+    transition: .2s;
+}
