@@ -10,7 +10,7 @@ from Product.models import MeasurementUnit, MateriaPrima
 from Client.models import Cliente
 from Operator.models import Operador, DisponibilidadOperador
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
 import csv, chardet, pytz
 
 
@@ -423,15 +423,12 @@ class OTView(generics.ListAPIView):
     
 from rest_framework.views import APIView
 
-
-
 class ProgramListView(generics.ListAPIView):
     queryset = ProgramaProduccion.objects.all()
     serializer_class = ProgramaProduccionSerializer
 
 
 from django.utils.dateparse import parse_date, parse_datetime
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -580,135 +577,144 @@ class ProgramCreateView(APIView):
                     defaults={'ocupado': True, 'programa': programa}
             )
 
-from rest_framework.exceptions import NotFound
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.db import transaction
-from django.core.exceptions import ValidationError
-from django.db.models import Prefetch
 
-class ProgramaProduccionUpdateView(generics.UpdateAPIView):
-    serializer_class = ProgramaProduccionSerializer
+def is_working_day(date):
+    """Determina si una fecha es día laboral (L-V)"""
+    return date.weekday() < 5  # 0-4 son Lunes a Viernes
+
+def get_next_working_day(date):
+    """Obtiene el siguiente día laboral"""
+    next_day = date + timedelta(days=1)
+    while not is_working_day(next_day):
+        next_day += timedelta(days=1)
+    return next_day
+
+def calculate_working_days(start_date, cantidad, estandar):
+    """Calcula los intervalos de trabajo diarios considerando solo días laborales"""
+    current_date = start_date
+    # Si la fecha inicial no es día laboral, mover al siguiente día laboral
+    while not is_working_day(current_date):
+        current_date = get_next_working_day(current_date)
     
-
-    def get_object(self):
-        # Fetch the latest ProgramaProduccion instance by created_at
-        return ProgramaProduccion.objects.latest('created_at')
-
-    def retrieve(self, request, *args, **kwargs):
-        """Retrieve complete information about the latest ProgramaProduccion."""
-        programa = self.get_object()
-        
-        # Prefetch related data for ProgramaOrdenTrabajo and nested relations
-        programa = ProgramaProduccion.objects.prefetch_related(
-            Prefetch(
-                'programaordentrabajo_set',
-                queryset=ProgramaOrdenTrabajo.objects.select_related('orden_trabajo').order_by('prioridad')
-            ),
-            'programaordentrabajo_set__orden_trabajo__ruta_ot__items'  # Deep prefetch for nested data
-        ).get(id=programa.id)
-        
-        # Serialize all data
-        serializer = self.get_serializer(programa)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    def update(self, request, *args, **kwargs):
-        """Handle updates to ProgramaProduccion and its related models."""
-        data = request.data
-        programa = self.get_object()
-
-        with transaction.atomic():
-            # Update ProgramaProduccion fields
-            serializer = self.get_serializer(programa, data=data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-
-            # Handle related ProgramaOrdenTrabajo and OrdenTrabajo updates
-            for ot_data in data.get('ordenes_trabajo', []):
-                orden_trabajo = OrdenTrabajo.objects.select_related('ruta_ot').get(codigo_ot=ot_data['codigo_ot'])
-
-                # Update OT-related fields if necessary
-                if 'ruta_ot' in ot_data and 'items' in ot_data['ruta_ot']:
-                    self.update_ruta_ot_items(orden_trabajo.ruta_ot, ot_data['ruta_ot']['items'])
-
-                # Update or create ProgramaOrdenTrabajo
-                ProgramaOrdenTrabajo.objects.update_or_create(
-                    programa=programa,
-                    orden_trabajo=orden_trabajo,
-                    defaults={'prioridad': ot_data['prioridad']}
-                )
-
-            # Additional logic (e.g., operator or machine availability) can be placed here
+    remaining_units = cantidad
+    intervals = []
+    
+    while remaining_units > 0:
+        if is_working_day(current_date):
+            units_today = min(remaining_units, estandar)
+            # Crear fecha con hora de inicio (8:00) y fin (17:00) del día
+            start_datetime = datetime.combine(current_date, time(7, 45))  # 8:00 AM
+            end_datetime = datetime.combine(current_date, time(17, 45))   # 5:00 PM
             
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
-    def update_ruta_ot_items(self, ruta_ot, items_data):
-        """Update items related to a RutaOT."""
-        for item_data in items_data:
-            try:
-                item = ruta_ot.items.get(item=item_data['item'])
-                if 'maquina' in item_data:
-                    item.maquina = Maquina.objects.get(id=item_data['maquina'])
-                if 'estandar' in item_data:
-                    item.estandar = item_data['estandar']
-                item.save()
-            except Exception as e:
-                print("Error updating ItemRuta:", e)
-    
-    def list_full_programa(self, request):
-        """Send complete ProgramaProduccion data for the frontend."""
-        programa = self.get_object()
+            intervals.append({
+                'fecha': current_date,
+                'fecha_inicio': start_datetime,
+                'fecha_fin': end_datetime,
+                'unidades': units_today,
+                'unidades_restantes': remaining_units - units_today
+            })
+            remaining_units -= units_today
         
-        programa_data = ProgramaProduccion.objects.prefetch_related(
-            Prefetch(
-                'programaordentrabajo_set',
-                queryset=ProgramaOrdenTrabajo.objects.select_related('orden_trabajo').order_by('prioridad')
-            ),
-            'programaordentrabajo_set__orden_trabajo__ruta_ot__items'
-        ).get(id=programa.id)
+        current_date = get_next_working_day(current_date)
+    
+    return {
+        'start_date': intervals[0]['fecha'] if intervals else start_date,
+        'end_date': intervals[-1]['fecha'] if intervals else start_date,
+        'intervals': intervals
+    }
 
-        # Custom serializer or manual data preparation to include nested data
-        full_data = {
-            'id': programa_data.id,
-            'nombre': programa_data.nombre,
-            'fecha_inicio': programa_data.fecha_inicio,
-            'fecha_fin': programa_data.fecha_fin,
-            'ordenes_trabajo': [
-                {
-                    'codigo_ot': po.orden_trabajo.codigo_ot,
-                    'descripcion': po.orden_trabajo.descripcion,
-                    'prioridad': po.prioridad,
-                    'ruta': [
-                        {
-                            'item': item.item,
-                            'maquina': item.maquina.id if item.maquina else None,
-                            'estandar': item.estandar
-                        } for item in po.orden_trabajo.ruta_ot.items.all()
-                    ]
-                } for po in programa_data.programaordentrabajo_set.all()
-            ]
+def generate_routes_data(program):
+    """Genera los datos de rutas para el timeline basado en un programa de producción."""
+    program_ots = ProgramaOrdenTrabajo.objects.filter(
+        programa=program
+    ).select_related(
+        'orden_trabajo',
+        'orden_trabajo__ruta_ot'
+    ).prefetch_related(
+        'orden_trabajo__ruta_ot__items',
+        'orden_trabajo__ruta_ot__items__proceso',
+        'orden_trabajo__ruta_ot__items__maquina'
+    ).order_by('prioridad')
+
+    groups = []
+    items = []
+
+    for prog_ot in program_ots:
+        ot = prog_ot.orden_trabajo
+        ruta = getattr(ot, 'ruta_ot', None)
+
+        if not ruta:
+            continue
+
+        ot_group = {
+            "id": f"ot_{ot.id}",
+            "orden_trabajo_codigo_ot": ot.codigo_ot,
+            "descripcion": ot.descripcion_producto_ot,
+            "procesos": []
         }
-        return Response(full_data, status=status.HTTP_200_OK)
+
+        ruta_items = ruta.items.all().order_by('item')
+        
+        fecha_inicio = ot.fecha_emision or ot.fecha_proc or program.fecha_inicio
+        fecha_actual = fecha_inicio
+
+        for item_ruta in ruta_items:
+            proceso = item_ruta.proceso
+            maquina = item_ruta.maquina
+
+            proceso_id = f"proc_{item_ruta.id}"
+            ot_group["procesos"].append({
+                "id": proceso_id,
+                "descripcion": f"{proceso.descripcion} - {maquina.descripcion}",
+                "item": item_ruta.item
+            })
+
+            if item_ruta.estandar <= 0:
+                item_ruta.estandar = 500
+
+            # Calcular fechas e intervalos
+            dates_data = calculate_working_days(
+                fecha_actual,
+                item_ruta.cantidad_pedido,
+                item_ruta.estandar
+            )
+
+            # Crear un item por cada intervalo
+            for idx, interval in enumerate(dates_data['intervals']):
+                items.append({
+                    "id": f'item_{item_ruta.id}_{idx}',
+                    "ot_id": f"ot_{ot.id}",
+                    "proceso_id": proceso_id,
+                    "name": f"{proceso.descripcion} - {interval['unidades']} de {item_ruta.cantidad_pedido} unidades",
+                    "start_time": interval['fecha_inicio'].strftime('%Y-%m-%d %H:%M:%S'),
+                    "end_time": interval['fecha_fin'].strftime('%Y-%m-%d %H:%M:%S'),
+                    "cantidad_total": float(item_ruta.cantidad_pedido),
+                    "cantidad_intervalo": float(interval['unidades']),
+                    "unidades_restantes": float(interval['unidades_restantes']),
+                    "estandar": item_ruta.estandar
+                })
+
+            fecha_actual = get_next_working_day(dates_data['end_date'])
+
+        groups.append(ot_group)
+
+    return {
+        "groups": groups,
+        "items": items
+    }
 
 
 class UpdatePriorityView(APIView):
-    def put(self, request, pk):
+    def put(self, request, pk): 
         try:
             programa = ProgramaProduccion.objects.get(id=pk)
-        except ProgramaProduccion.DoesNotExist:
-            return Response(
-                {"error": f"El programa con ID {pk} no existe."}, status=status.HTTP_404_NOT_FOUND
-            )
+            order_ids = request.data.get("order_ids", [])
+            if not isinstance(order_ids, list):
+                return Response({"error": "Formato incorrecto. 'order_ids' debe ser una lista de IDs."}, status=status.HTTP_400_BAD_REQUEST)
 
-        order_ids = request.data.get("order_ids", [])
-        if not isinstance(order_ids, list):
-            return Response({"error": "Formato incorrecto. 'order_ids' debe ser una lista de IDs."}, status=status.HTTP_400_BAD_REQUEST)
-
-        success = {'updated': 0, 'errors': 0}
-
-        try:
+            success = {'updated': 0, 'errors': 0}
+            
             with transaction.atomic():
                 for order_data in order_ids:
                     try:
@@ -727,11 +733,16 @@ class UpdatePriorityView(APIView):
                 "message": "Prioridades actualizadas correctamente.",
                 "result": success
             }, status=status.HTTP_200_OK)
+        except ProgramaProduccion.DoesNotExist:
+            return Response(
+                {"error": f"El programa con ID {pk} no existe."}, status=status.HTTP_404_NOT_FOUND
+            )
         except Exception as e:
             return Response({
                 "message": "Error al actualizar las prioridades.",
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
@@ -892,7 +903,7 @@ class ProgramDetailView(APIView):
 
                 ruta_items = ruta.items.all().order_by('item')
 
-                fecha_inicio = ot.fecha_emision or ot.fecha_proc_ or program.fecha_inicio
+                fecha_inicio = ot.fecha_emision or ot.fecha_proc or program.fecha_inicio
                 fecha_actual = fecha_inicio
 
                 procesos = []
@@ -912,21 +923,29 @@ class ProgramDetailView(APIView):
                     if item_ruta.estandar <= 0:
                         item_ruta.estandar = 500
 
-                    dias_proceso = max(1, int(item_ruta.cantidad_pedido / item_ruta.estandar))
-                    fecha_fin = fecha_actual + timedelta(days=dias_proceso)
+                    # Calcular fechas e intervalos
+                    dates_data = calculate_working_days(
+                        fecha_actual,
+                        item_ruta.cantidad_pedido,
+                        item_ruta.estandar
+                    )
 
-                    items.append({
-                        "id": f'item_{item_ruta.id}',
-                        "ot_id":f"ot_{ot.id}",
-                        "proceso_id": proceso_id,
-                        "name": f"{proceso.descripcion} -  {item_ruta.cantidad_pedido} unidades",
-                        "start_time": fecha_actual.strftime('%Y-%m-%d'),
-                        "end_time": fecha_fin.strftime('%Y-%m-%d'),
-                        "cantidad": float(item_ruta.cantidad_pedido),
-                        "estandar": item_ruta.estandar
-                    })
+                    # Crear un item por cada intervalo
+                    for idx, interval in enumerate(dates_data['intervals']):
+                        items.append({
+                            "id": f'item_{item_ruta.id}_{idx}',
+                            "ot_id": f"ot_{ot.id}",
+                            "proceso_id": proceso_id,
+                            "name": f"{proceso.descripcion} - {interval['unidades']} de {item_ruta.cantidad_pedido} unidades",
+                            "start_time": interval['fecha_inicio'].strftime('%Y-%m-%d %H:%M:%S'),
+                            "end_time": interval['fecha_fin'].strftime('%Y-%m-%d %H:%M:%S'),
+                            "cantidad_total": float(item_ruta.cantidad_pedido),
+                            "cantidad_intervalo": float(interval['unidades']),
+                            "unidades_restantes": float(interval['unidades_restantes']),
+                            "estandar": item_ruta.estandar
+                        })
 
-                    fecha_actual = fecha_fin + timedelta(days=1)
+                    fecha_actual = get_next_working_day(dates_data['end_date'])
 
                 groups.append(ot_group)
             
@@ -1103,227 +1122,3 @@ def get_unassigned_ots(request):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
-
-class UpdateOrderPriorityView(APIView):
-    """
-    Update the priority of orders in a specific program.
-    """
-    def post(self, request):
-        orders = request.data.get('orders', [])
-        for order_data in orders:
-            try:
-                order = OrdenTrabajo.objects.get(id=order_data['id'])
-                order.prioridad = order_data['priority']
-                order.save()
-            except OrdenTrabajo.DoesNotExist:
-                return Response({"error": f"Order with ID {order_data['id']} not found"}, 
-                                status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response({"message": "Priorities updated successfully"}, status=status.HTTP_200_OK)
-
-#Editar el CRUD del programa, añadirle metodos a las clases y modificar el front para que se comuniquen correctamente
-
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
-from .models import ProgramaProduccion, ProgramaOrdenTrabajo, ItemRuta
-
-from django.shortcuts import render
-from .models import ProgramaProduccion, ItemRuta
-import json
-
-def generar_gantt_data(request, ruta_ot_id):
-    try:
-        ruta_ot = RutaOT.objects.prefetch_related('items__proceso').get(id=ruta_ot_id)
-        fecha_inicio_ruta = ruta_ot.orden_trabajo.fecha_emision or ruta_ot.orden_trabajo.fecha_proc
-        items_ruta = ruta_ot.items.order_by('item')
-
-        dia_actual = fecha_inicio_ruta
-        tasks = []
-        links = []
-        task_id = 1 
-
-        for i, item in enumerate(items_ruta):
-            dia_inicio = dia_actual if i==0 else dia_actual + timedelta(days=1)
-            if item.estandar <=0:
-                item.estandar = 500
-
-            cantidad_restante = item.cantidad_pedido 
-            dia_termino = dia_inicio
-
-            while cantidad_restante > 0:
-                produccion_diaria = min(item.estandar, cantidad_restante)
-                cantidad_restante -= produccion_diaria
-
-                if cantidad_restante > 0:
-                    dia_termino += timedelta(days=1)
-
-            tasks.append({
-                "id": task_id,
-                "text": f"{item.proceso.descripcion} - {item.maquina.descripcion}",
-                "start_date": dia_inicio.strftime("%Y-%m-%d"),
-                "end_date": dia_termino.strftime("%Y-%m-%d"),
-                "progress": 0,
-            })
-            task_id += 1
-
-            if task_id > 1:
-                links.append({
-                    "id": task_id - 1,
-                    "source": task_id - 2,
-                    "target": task_id -3,
-                    "type": "0",
-                })
-            dia_actual = dia_termino
-
-        return JsonResponse({"data":tasks, "links":links})
-    except RutaOT.DoesNotExist:
-        return JsonResponse({"error": "RutaOT no encontrada"}, status=404)
-    
-
-"""
-class ProgramDetailView(APIView):
-    
-    Retrieve details of a specific production program and include calculated routes.
-    
-
-    def get(self, request, pk):
-        try:
-            # Obtener el programa por su ID
-            program = ProgramaProduccion.objects.get(id=pk)
-        except ProgramaProduccion.DoesNotExist:
-            return Response({"error": "Program not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        # Serializar el programa
-        serializer = ProgramaProduccionSerializer(program)
-
-        # Obtener rutas planificadas
-        rutas_planificadas = self.get_rutas_planificadas(program)
-
-        rutas_gantt = self.transform_to_gantt_format(rutas_planificadas)
-
-        # Preparar el JSON para enviar
-        response_data = {
-            "program": serializer.data,  # Detalles del programa serializados
-            "rutas_planificadas": rutas_planificadas,  # Rutas calculadas
-            "rutas_gantt": rutas_gantt
-        }
-
-        return Response(response_data)
-    
-    def transform_to_gantt_format(self, rutas):
-        tasks = []
-        links = []
-        ot_ids = {}  # Diccionario para registrar las OTs como nodos principales
-        current_task_id = 0  # ID inicial para tareas
-
-        for ruta in rutas:
-            ot_code = ruta['ot']
-            # Crear nodo padre para la OT si aún no existe
-            if ot_code not in ot_ids:
-                current_task_id += 1
-                ot_ids[ot_code] = current_task_id
-                tasks.append({
-                    "id": current_task_id,
-                    "text": f"OT: {ot_code} - {ruta['producto']}",
-                    "start_date": ruta['fecha_inicio'],  # La fecha de inicio del primer proceso
-                    "duration": 0,  # La OT no tiene duración propia
-                    "progress": 0,
-                    "parent": 0,  # Nodo raíz
-                })
-
-            # Crear nodos hijos para los ítems/procesos
-            current_task_id += 1
-            tasks.append({
-                "id": current_task_id,
-                "text": f"{ruta['proceso']} - {ruta['maquina']}",
-                "start_date": ruta['fecha_inicio'],
-                "duration": (datetime.strptime(ruta['fecha_termino'], "%Y-%m-%d") - datetime.strptime(ruta['fecha_inicio'], "%Y-%m-%d")).days,
-                "progress": 0,
-                "parent": ot_ids[ot_code],  # Nodo padre es la OT
-            })
-
-            # Crear vínculos si es necesario
-            if len(tasks) > 1 and tasks[-2]["parent"] == ot_ids[ot_code]:
-                links.append({
-                    "id": len(links) + 1,
-                    "source": tasks[-2]["id"],  # Nodo previo
-                    "target": tasks[-1]["id"],  # Nodo actual
-                    "type": "0"
-                })
-
-        return {"data": tasks, "links": links}
-
-
-    
-
-    def get_rutas_planificadas(self, program):
-        
-        Procesa las rutas asociadas al programa y devuelve un dict con los resultados, 
-        encadenando las fechas entre órdenes según su prioridad.
-        
-        pot_srch = ProgramaOrdenTrabajo.objects.filter(programa=program).order_by('prioridad')
-        resultados = []
-        fecha_inicio_global = None  # Controlará el inicio general del programa.
-
-        for programa_ot in pot_srch:
-            ot = programa_ot.orden_trabajo
-            rutas = RutaOT.objects.filter(orden_trabajo=ot).prefetch_related('items')
-            fecha_inicio_ruta = fecha_inicio_global or ot.fecha_emision or ot.fecha_proc  # Fecha inicial calculada
-            item_rutas = rutas.order_by('items__item')  # Ordenamos los ítems por prioridad/item
-
-            dia_actual = fecha_inicio_ruta
-            produccion_acumulada = defaultdict(int)
-
-            for ruta_ot in item_rutas:
-                item_rutas_ot = ruta_ot.items.order_by('item')  # Aseguramos que los ítems estén ordenados.
-                for i, item in enumerate(item_rutas_ot):
-                    # Determinar la fecha de inicio y calcular fechas.
-                    dia_inicio = dia_actual if i == 0 else dia_actual + timedelta(days=1)
-
-                    if item.estandar <= 0:
-                        item.estandar = 50
-
-                    cantidad_restante = item.cantidad_pedido
-                    dia_termino = dia_inicio
-                    dias_produccion = []
-
-                    while cantidad_restante > 0:
-                        produccion_diaria = min(item.estandar, cantidad_restante)
-                        dias_produccion.append({
-                            'fecha': dia_termino.strftime('%Y-%m-%d'),
-                            'produccion': produccion_diaria
-                        })
-                        produccion_acumulada[item.proceso.id] += produccion_diaria
-                        cantidad_restante -= produccion_diaria
-
-                        if cantidad_restante > 0:
-                            dia_termino += timedelta(days=1)
-
-                    # Agregar los resultados de la ruta
-                    if dias_produccion:
-                        resultados.append({
-                            'item': item.item,
-                            'ot': ruta_ot.orden_trabajo.codigo_ot,
-                            'producto': ruta_ot.orden_trabajo.descripcion_producto_ot,
-                            'maquina': item.maquina.descripcion,
-                            'proceso': item.proceso.descripcion,
-                            'cantidad': item.cantidad_pedido,
-                            'estandar': item.estandar,
-                            'fecha_inicio': dia_inicio.strftime('%Y-%m-%d'),
-                            'fecha_termino': dia_termino.strftime('%Y-%m-%d'),
-                            'dias_produccion': dias_produccion,
-                        })
-
-                    # Actualizar fecha para la siguiente ruta
-                    dia_actual = dia_termino
-
-            # Establecer fecha_inicio_global para la siguiente OT.
-            fecha_inicio_global = dia_actual
-
-        return resultados
-
-
-
-
-
-"""

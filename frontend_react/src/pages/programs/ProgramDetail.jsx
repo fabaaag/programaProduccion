@@ -184,16 +184,30 @@ export function ProgramDetail() {
         console.log("Nueva lista recibida: ", newOtList);
         setOtList(newOtList);
 
-        const orderIds = newOtList.map((ot, index) => {
-            if (!ot){
-                console.error("OT indefinida encontrada en el índice: ", index);
-                return null;
-            }
-            return {
+        const updatedGroups = newOtList.flatMap(ot => {
+            const mainGroup = {
+                id: `ot_${ot.orden_trabajo}`,
+                title: ot.orden_trabajo_codigo_ot,
+                height: 50,
+                stackItems: true
+            };
+
+            const processGroups = ot.procesos.map(proceso => ({
+                id: `${mainGroup.id}-${proceso.id}`,
+                title: proceso.descripcion,
+                parent: mainGroup.id,
+                height: 30
+            }));
+
+            return [mainGroup, ...processGroups];
+        });
+
+        setTimelineGroups(updatedGroups);
+
+        const orderIds = newOtList.map((ot, index) => ({
                 id: ot.orden_trabajo,
                 priority: index + 1
-            };
-        }).filter(item => item !== null);
+        })).filter(item => item !== null);
 
         console.log("Actualizando prioridades: ", orderIds);
         setLoading(true);
@@ -201,12 +215,32 @@ export function ProgramDetail() {
         updatePriorities(programId, orderIds)
             .then((response) => {
                 console.log("Prioridades actualizadas:", response);
+
+                if (response.routes_data?.items) {
+                    const serverItems = response.routes_data.items.map(item => ({
+                        id: item.id,
+                        group: `${item.ot_id}-${item.proceso_id}`,
+                        title: `${item.name} (Restantes: ${item.unidades_restantes})`,
+                        start_time: new Date(item.start_time + 'Z'),  // Añadimos Z para asegurar que se interprete en UTC
+                        end_time: new Date(item.end_time + 'Z'),      // Añadimos Z para asegurar que se interprete en UTC
+                        itemProps: {
+                            style: {
+                                backgroundColor: '#4CAF50',
+                                color: 'white',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                opacity: 1 - (item.unidades_restantes / item.cantidad_total)
+                            }
+                        }
+                    }));
+                    setTimelineItems(serverItems);
+                }
             })
             .catch((error) => {
                 console.error("Error al actualizar prioridades", error);
                 alert("Error al actualizar el orden de las OTs");
             })
-            .finally(()=>{
+            .finally(() => {
                 setLoading(false);
             });
     };
@@ -275,6 +309,7 @@ export function ProgramDetail() {
                                             proceso.id,
                                             "maquina",
                                             e.target.value
+                                            
                                         )}
                                         >
                                             {maquinas.map(maquina => (
@@ -376,16 +411,16 @@ export function ProgramDetail() {
                 {showTimeline && (
                     <div className="timeline-container mt-4 mb-4" style={{ width: "100%" }}>
                         <Timeline
-                            groups={timelineGroups} // Los grupos dinámicos
-                            items={timelineItems} // Las rutas generadas
+                            groups={timelineGroups}
+                            items={timelineItems}
                             defaultTimeStart={new Date()}
-                            defaultTimeEnd={new Date(new Date().getTime() + 24 * 60 * 60 * 1000)}
+                            defaultTimeEnd={new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000)}
                             lineHeight={50}
                             stackItems
                             sidebarWidth={200}
                             canMove={false}
                             canResize={false}
-                            groupRenderer={({ group })=>(
+                            groupRenderer={({ group }) => (
                                 <div style={{
                                     padding: "5px",
                                     backgroundColor: group.parent ? "#f0f0f0" : "#e0e0e0"
