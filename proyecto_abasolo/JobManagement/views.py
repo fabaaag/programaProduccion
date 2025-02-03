@@ -708,44 +708,129 @@ def generate_routes_data(program):
 class UpdatePriorityView(APIView):
     def put(self, request, pk): 
         try:
+            # Log de los datos recibidos
+            print("Datos recibidos:", request.data)
+            
             programa = ProgramaProduccion.objects.get(id=pk)
-            order_ids = request.data.get("order_ids", [])
-            if not isinstance(order_ids, list):
-                return Response({"error": "Formato incorrecto. 'order_ids' debe ser una lista de IDs."}, status=status.HTTP_400_BAD_REQUEST)
+            order_data = request.data.get("order_ids", [])
+            recalculate_dates = request.data.get("recalculate_dates", False)
+
+            if not isinstance(order_data, list):
+                return Response(
+                    {"error": "Formato incorrecto. 'order_ids' debe ser una lista de IDs."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             success = {'updated': 0, 'errors': 0}
+            error_details = []
             
             with transaction.atomic():
-                for order_data in order_ids:
+                for order in order_data:
                     try:
+                        print(f"Procesando orden: {order}")
                         prog_ot = ProgramaOrdenTrabajo.objects.get(
                             programa=programa,
-                            orden_trabajo_id=order_data['id']
+                            orden_trabajo_id=order['id']
                         )
-                        prog_ot.prioridad = order_data['priority']
+                        prog_ot.prioridad = order['priority']
                         prog_ot.save()
                         success['updated'] += 1
-                    except ProgramaOrdenTrabajo.DoesNotExist:
+
+                        if 'procesos' in order:
+                            for proceso in order['procesos']:
+                                try:
+                                    item_ruta = ItemRuta.objects.get(id=proceso['id'])
+                                    item_ruta.estandar = proceso.get('estandar', item_ruta.estandar)
+                                    item_ruta.save()
+                                except ItemRuta.DoesNotExist as e:
+                                    error_details.append(f"ItemRuta {proceso['id']} no encontrado")
+                                    success['errors'] += 1
+                                except Exception as e:
+                                    error_details.append(f"Error al actualizar ItemRuta {proceso['id']}: {str(e)}")
+                                    success['errors'] += 1
+
+                    except ProgramaOrdenTrabajo.DoesNotExist as e:
+                        error_details.append(f"ProgramaOrdenTrabajo no encontrado para orden {order['id']}")
                         success['errors'] += 1
-                        continue
-            
-            return Response({
-                "message": "Prioridades actualizadas correctamente.",
-                "result": success
-            }, status=status.HTTP_200_OK)
+                    except Exception as e:
+                        error_details.append(f"Error procesando orden {order['id']}: {str(e)}")
+                        success['errors'] += 1
+
+                if recalculate_dates:
+                    try:
+                        routes_data = generate_routes_data(programa)
+                        
+                        # Obtener datos actualizados de las OTs
+                        ordenes_trabajo = []
+                        programa_ots = ProgramaOrdenTrabajo.objects.filter(
+                            programa=programa
+                        ).select_related(
+                            'orden_trabajo',
+                            'orden_trabajo__ruta_ot'
+                        ).prefetch_related(
+                            'orden_trabajo__ruta_ot__items',
+                            'orden_trabajo__ruta_ot__items__proceso',
+                            'orden_trabajo__ruta_ot__items__maquina'
+                        ).order_by('prioridad')
+
+                        for prog_ot in programa_ots:
+                            ot = prog_ot.orden_trabajo
+                            ot_data = {
+                                'orden_trabajo': ot.id,
+                                'orden_trabajo_codigo_ot': ot.codigo_ot,
+                                'orden_trabajo_descripcion_producto_ot': ot.descripcion_producto_ot,
+                                'procesos': []
+                            }
+                            
+                            ruta = getattr(ot, 'ruta_ot', None)
+                            if ruta:
+                                for item in ruta.items.all().order_by('item'):
+                                    ot_data['procesos'].append({
+                                        'id': item.id,
+                                        'item': item.item,
+                                        'codigo_proceso': item.proceso.codigo_proceso,
+                                        'descripcion': item.proceso.descripcion,
+                                        'maquina_id': item.maquina.id if item.maquina else None,
+                                        'cantidad': item.cantidad_pedido,
+                                        'estandar': item.estandar
+                                    })
+                            
+                            ordenes_trabajo.append(ot_data)
+
+                        return Response({
+                            "message": "Prioridades y estándares actualizados correctamente.",
+                            "result": success,
+                            "error_details": error_details,
+                            "routes_data": routes_data,
+                            "ordenes_trabajo": ordenes_trabajo
+                        }, status=status.HTTP_200_OK)
+                    
+                    except Exception as e:
+                        error_details.append(f"Error al recalcular fechas: {str(e)}")
+                        return Response({
+                            "message": "Error al recalcular fechas",
+                            "result": success,
+                            "error_details": error_details
+                        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+                return Response({
+                    "message": "Prioridades y estándares actualizados correctamente.",
+                    "result": success,
+                    "error_details": error_details
+                }, status=status.HTTP_200_OK)
+
         except ProgramaProduccion.DoesNotExist:
             return Response(
-                {"error": f"El programa con ID {pk} no existe."}, status=status.HTTP_404_NOT_FOUND
+                {"error": f"El programa con ID {pk} no existe."}, 
+                status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
+            print(f"Error inesperado: {str(e)}")
             return Response({
-                "message": "Error al actualizar las prioridades.",
-                "error": str(e)
+                "message": "Error al actualizar las prioridades y estándares.",
+                "error": str(e),
+                "error_details": error_details
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
-
 
     def update_prio(self, pk, order_ids):
         success = {'success': 0, 'updated': 0, 'errors': 0}

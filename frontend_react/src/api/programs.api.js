@@ -29,7 +29,10 @@ export const updatePriorities = async (programId, orderIds) => {
   try {
     const response = await programsApi.put(
       `${programId}/update-prio/`,
-      { order_ids: orderIds },
+      { 
+        order_ids: orderIds,
+        recalculate_dates: true
+      },
       {
         headers: {
           'Content-Type':'application/json',

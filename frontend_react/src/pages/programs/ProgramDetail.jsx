@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link, redirect } from "react-router-dom";
-import { Button, Dropdown } from "react-bootstrap";
+import { Button, Dropdown, Form } from "react-bootstrap";
 import { ReactSortable } from "react-sortablejs";
 import CompNavbar from "../../components/Navbar/CompNavbar";
 import { Footer } from "../../components/Footer/Footer";
 import { getProgram, updatePriorities, deleteOrder } from "../../api/programs.api";
 import Timeline from "react-calendar-timeline";
 import "react-calendar-timeline/dist/Timeline.scss";
-
+import toast from "react-hot-toast";
 export function ProgramDetail() {
     const { programId } = useParams();
     const [programData, setProgramData] = useState(null);
@@ -21,6 +21,121 @@ export function ProgramDetail() {
     const [expandedOTs, setExpandedOTs] = useState({});
     const [maquinas, setMaquinas] = useState([]);
 
+    const [pendingChanges, setPendingChanges] = useState({});
+    const [savingChanges, setSavingChanges] = useState(false);
+
+    const handleProcessChange = (otId, procesoId, field, value) => {
+        if(!otList){
+            console.error('otList no está inicializado.');
+            return;
+        }
+    
+        console.log(`Cambio pendiente en OT: ${otId}, Proceso: ${procesoId}, Campo: ${field}, Valor: ${value}`);
+    
+        setOtList(prevOtList => {
+            if(!prevOtList) return [];  // Retornamos array vacío si es undefined
+    
+            const newList = prevOtList.map(ot => {
+                if(ot.orden_trabajo === otId && ot.procesos){
+                    return{
+                        ...ot,
+                        procesos: ot.procesos.map(proceso => {
+                            if(proceso.id === procesoId){
+                                return {
+                                    ...proceso,
+                                    [field]: value
+                                };
+                            }
+                            return proceso;
+                        })
+                    };
+                }
+                return ot;
+            });
+            return newList;
+        });
+
+        setPendingChanges(prev => {
+            const newChanges = {
+                ...prev,
+                [`${otId}-${procesoId}-${field}`]: {
+                    otId,
+                    procesoId,
+                    field,
+                    value
+                }
+            };
+            console.log('Cambios pendientes:', newChanges);
+            return newChanges;
+        });
+
+        toast('Hay cambios pendientes por guardar', {
+            icon: '⚠️',
+            style: {
+                borderRadius: '10px',
+                background: '#333',
+                color: '#fff'
+            },
+        });
+    };
+
+    const handleSaveChanges = async () => {
+        if (!otList || otList.length === 0) {
+            console.error("No hay OTs para guardar");
+            toast.error("No hay OTs para guardar");
+            return;
+        }
+    
+        setSavingChanges(true);
+        try {
+            const updatedOrders = otList.map((ot, index) => ({
+                id: ot.orden_trabajo,
+                priority: index + 1,
+                procesos: ot.procesos?.map(proceso => ({
+                    id: proceso.id,
+                    estandar: proceso.estandar || 0
+                })) || []
+            }));
+    
+            console.log("Datos que se enviarán al backend:", updatedOrders);
+            
+            const response = await updatePriorities(programId, updatedOrders);
+            console.log("Respuesta del servidor:", response);
+    
+            if (response.ordenes_trabajo) {
+                setOtList(response.ordenes_trabajo);
+            }
+    
+            if (response.routes_data?.items) {
+                setTimelineItems(response.routes_data.items.map(item => ({
+                    id: item.id,
+                    group: `${item.ot_id}-${item.proceso_id}`,
+                    title: `${item.name} (Restantes: ${item.unidades_restantes})`,
+                    start_time: new Date(item.start_time + 'Z'),
+                    end_time: new Date(item.end_time + 'Z'),
+                    itemProps: {
+                        style: {
+                            backgroundColor: '#4CAF50',
+                            color: 'white',
+                            borderRadius: '4px',
+                            padding: '2px 6px',
+                            opacity: 1 - (item.unidades_restantes / item.cantidad_total)
+                        }
+                    }
+                })));
+            }
+    
+            setPendingChanges({});
+            toast.success('Cambios guardados correctamente');
+        } catch (error) {
+            console.error("Error al guardar los cambios:", error);
+            toast.error("Error al guardar los cambios");
+        } finally {
+            setSavingChanges(false);
+        }
+    };
+
+
     const handleToggleExpand = (otId) => {
         setExpandedOTs((prevExpanded) => ({
             ...prevExpanded,
@@ -28,28 +143,6 @@ export function ProgramDetail() {
         }));
     };
 
-    const handleProcessUpdate = (otId, procesoId, field, value) => {
-        console.log(`Actualizando OT: ${otId}, Proceso: ${procesoId}, Campo: ${field}, Valor: ${value}`);
-
-        setOtList(prevOtList => prevOtList.map(ot => {
-            if (ot.orden_trabajo === otId){
-                return{
-                    ...ot,
-                    procesos: ot.procesos.map(proceso => {
-                        if (proceso.id === procesoId){
-                            return {
-                                ...proceso,
-                                [field]: value
-                            };
-                        }
-                        return proceso;
-                    })
-                }
-            }
-            return ot;
-        }));
-    };
-    
 
     const toggleTimeline = () => {
         if (!showTimeline) {
@@ -60,9 +153,6 @@ export function ProgramDetail() {
     };
 
     
-
-    
-
 
     useEffect(() => {
         if (!programId) {
@@ -92,13 +182,13 @@ export function ProgramDetail() {
                         const processedGroups = groups.map(ot => ({
                             id: ot.id,
                             title: ot.orden_trabajo_codigo_ot || "OT Sin código",
-                            stackItems: true,
-                            height: 50,
+                            stackItems: false,
+                            height: 70,
                             subgroups: ot.procesos?.map(proceso =>({
                                 id: `${ot.id}-${proceso.id}`,
                                 title: proceso.descripcion,
                                 parent:ot.id,
-                                height: 30,
+                                height: 50,
                             })) || []
                         }));
 
@@ -136,7 +226,8 @@ export function ProgramDetail() {
                                     backgroundColor: new Date(item.end || item.end_time) < new Date() ? "#ff4444" : "#4CAF50",
                                     color: 'white',
                                     borderRadius: '4px',
-                                    padding: '2px 6px'
+                                    padding: '2px',
+                                    marginBottom: '10px',    
                                 },
                             },
                             canMove: true,
@@ -246,7 +337,7 @@ export function ProgramDetail() {
     };
 
     const renderOt = (ot) => {
-        console.log("Renderizando OT: ", ot);
+        const hasPendingChanges = Object.keys(pendingChanges).some(change => change.startsWith(`${ot.orden_trabajo}-`));
         if (!ot) return null;
         return (
             <div
@@ -262,17 +353,31 @@ export function ProgramDetail() {
                 }}
             >
                 <div className="d-flex justify-content-between align-items-center">
-                    <span>
-                        {ot.orden_trabajo_codigo_ot || "Sin código"} -{" "}
-                        {ot.orden_trabajo_descripcion_producto_ot || "Sin descripción"} -{" "}
-                        {ot.orden_trabajo_fecha_termino || "Sin fecha"}
-                    </span>
-                    <button 
-                    className="btn btn-outline-primary"
-                    onClick={() => handleToggleExpand(ot.orden_trabajo)}
-                    >
-                        {expandedOTs[ot.orden_trabajo] ? "Ocultar" : "Expandir"}
-                    </button>
+                    <div className="d-flex align-items-center">
+                        <span className="me-3">{ot.orden_trabajo_codigo_ot || "Sin código"}</span>
+                        <span>{ot.orden_trabajo_descripcion_producto_ot || "Sin descripción"}</span>
+                        <span className="ms-3">{ot.orden_trabajo_fecha_termino || "Sin fecha"}</span>
+                    </div>
+                    <div className="d-flex aling-items-center">
+                        {hasPendingChanges && (
+                            <Button
+                                variant="success"
+                                size="sm"
+                                onClick={handleSaveChanges}
+                                disabled={savingChanges}
+                                className="me-2"
+                            >
+                                {savingChanges ? "Guardando..." : "Guardar"}
+                            </Button>
+                        )}
+                        <Button
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={() => handleToggleExpand(ot.orden_trabajo)}
+                        >
+                            {expandedOTs[ot.orden_trabajo] ? "Ocultar" : "Mostrar"}
+                        </Button>
+                    </div>
                 </div>
                 {/*Contenido expandible */}
                 {expandedOTs[ot.orden_trabajo] && (
@@ -333,16 +438,20 @@ export function ProgramDetail() {
                                         />
                                     </td>
                                     <td>
-                                        <input 
-                                        type="number" 
-                                        className="form-control"
-                                        value={proceso.estandar}
-                                        onChange={(e) => handleProcessUpdate(
-                                            ot.orden_trabajo,
-                                            proceso.id,
-                                            'estandar',
-                                            parseInt(e.target.value, 10)
-                                        )}
+                                        <Form.Control 
+                                            type="number"
+                                            value={proceso.estandar || 0}
+                                            onChange={(e) => {
+                                                const newValue = parseFloat(e.target.value);
+                                                handleProcessChange(
+                                                    ot.orden_trabajo,
+                                                    proceso.id,
+                                                    'estandar',
+                                                    parseFloat(e.target.value)
+                                                );
+                                            }}
+                                            min="0"
+                                            step="1"
                                         />
                                     </td>
                                 </tr>
@@ -415,15 +524,18 @@ export function ProgramDetail() {
                             items={timelineItems}
                             defaultTimeStart={new Date()}
                             defaultTimeEnd={new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000)}
-                            lineHeight={50}
-                            stackItems
+                            lineHeight={70}
                             sidebarWidth={200}
                             canMove={false}
                             canResize={false}
+                            itemHeightRatio={0.38}
                             groupRenderer={({ group }) => (
                                 <div style={{
                                     padding: "5px",
-                                    backgroundColor: group.parent ? "#f0f0f0" : "#e0e0e0"
+                                    backgroundColor: group.parent ? "#f0f0f0" : "#e0e0e0",
+                                    height: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center'
                                 }}>
                                     {group.title}
                                 </div>
