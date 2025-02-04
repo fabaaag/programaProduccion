@@ -8,6 +8,7 @@ import { ProgramPage } from './pages/programs/ProgramPage'
 import { ProgramFormPage } from './pages/programs/ProgramFormPage'
 import { ProgramaCard } from './components/Programa/ProgramaCard'
 import { ProgramDetail } from './pages/programs/ProgramDetail'
+import { Toaster } from 'react-hot-toast'
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
        <Route path='/programs-create' element={<ProgramFormPage/>}/>
        <Route path='/programs/:programId' element={<ProgramDetail/>}/>
       </Routes>
+      <Toaster/>
     </BrowserRouter>
   )
 }

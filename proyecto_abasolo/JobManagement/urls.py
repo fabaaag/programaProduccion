@@ -16,5 +16,6 @@ urlpatterns += [
     path('api/v1/programas/', views.ProgramListView.as_view(), name='program-list'),
     path('api/v1/programas/<int:pk>/update-prio/', views.UpdatePriorityView.as_view(), name='program-detail'),
     path('api/v1/programas/<int:pk>/delete-orders/', views.UpdatePriorityView.as_view(), name='delete_orders'),
+    path('api/v1/programas/<int:pk>/delete/', views.ProgramListView.as_view(), name='delete_program')
 ]
 

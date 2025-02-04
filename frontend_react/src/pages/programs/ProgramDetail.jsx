@@ -7,7 +7,9 @@ import { Footer } from "../../components/Footer/Footer";
 import { getProgram, updatePriorities, deleteOrder } from "../../api/programs.api";
 import Timeline from "react-calendar-timeline";
 import "react-calendar-timeline/dist/Timeline.scss";
-import toast from "react-hot-toast";
+import { toast } from "react-hot-toast";
+
+
 export function ProgramDetail() {
     const { programId } = useParams();
     const [programData, setProgramData] = useState(null);

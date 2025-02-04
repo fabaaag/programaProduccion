@@ -9,7 +9,15 @@ export const createProgram = (program) => programsApi.post('/crear_programa/', p
 
 export const getAllPrograms = () => programsApi.get('/');
 
-export const deleteProgram = (id) => programsApi.delete(`/${id}/`);
+export const deleteProgram = async (id) => {
+  try {
+      const response = await programsApi.delete(`/${id}/`);
+      return response.data
+  } catch (error) {
+      console.log("Error eliminando programas:", error)
+      throw error
+  }
+};
 export const updateProgram = (id, program) => programsApi.put(`/${id}/`, program);
 export const getProgram = async (programId) => {
     try {

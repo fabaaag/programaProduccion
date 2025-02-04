@@ -427,6 +427,22 @@ class ProgramListView(generics.ListAPIView):
     queryset = ProgramaProduccion.objects.all()
     serializer_class = ProgramaProduccionSerializer
 
+    def delete(self, request, pk):
+        try:
+            programa = ProgramaProduccion.object.get(id=pk)
+            programa.delete()
+            return Response({
+                "message": "Programa eliminado corretamente"
+            }, status=status.HTTP_200_OK)
+        except ProgramaProduccion.DoesNotExist:
+            return Response({
+                "error": "Programa no encontrado"
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                "error": f"Error al eliminar el programa: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework.views import APIView
@@ -1168,6 +1184,9 @@ class ProgramDetailView(APIView):
                 # Actualizar el día actual
                 dia_actual = dia_termino
         return resultados
+
+   
+
 
 
 class MaquinasView(APIView):
