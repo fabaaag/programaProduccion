@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import {getAllClients} from '../../api/clients.api'
-import compNavbar from '../Navbar/compNavbar.jsx'
+import CompNavbar from '../Navbar/CompNavbar.jsx'
 import { useNavigate } from "react-router-dom"
 
 export function ClientList() {

@@ -4,7 +4,7 @@ import { Button, Dropdown, Form } from "react-bootstrap";
 import { ReactSortable } from "react-sortablejs";
 import CompNavbar from "../../components/Navbar/CompNavbar";
 import { Footer } from "../../components/Footer/Footer";
-import { getProgram, updatePriorities, deleteOrder } from "../../api/programs.api";
+import { getProgram, updatePriorities, deleteOrder, getMaquinas } from "../../api/programs.api";
 import Timeline from "react-calendar-timeline";
 import "react-calendar-timeline/dist/Timeline.scss";
 import { toast } from "react-hot-toast";
@@ -95,7 +95,8 @@ export function ProgramDetail() {
                 priority: index + 1,
                 procesos: ot.procesos?.map(proceso => ({
                     id: proceso.id,
-                    estandar: proceso.estandar || 0
+                    estandar: proceso.estandar || 0,
+                    maquina_id: proceso.maquina_id
                 })) || []
             }));
     
@@ -154,7 +155,25 @@ export function ProgramDetail() {
         setShowTimeline(!showTimeline);
     };
 
-    
+    useEffect(()=> {
+        const fetchMaquinas = async () => {
+            if(!programId){
+                console.error("No hay programId disponible");
+                return;
+            }
+            try{
+                const response = await getMaquinas(programId);
+                console.log("Maquinas cargadas:", response);
+                setMaquinas(response);
+            }catch(error){
+                console.error("Error al cargar máquinas:", error);
+                toast.error("Error al cargar la lista de máquinas");
+            }
+        };
+        fetchMaquinas();
+    }, [programId])
+
+
 
     useEffect(() => {
         if (!programId) {
@@ -410,20 +429,28 @@ export function ProgramDetail() {
                                     <td>
                                         <select 
                                         className="form-control" 
-                                        value={`${proceso.maquina_id}`}
-                                        onChange={(e) => handleProcessUpdate(
+                                        value={proceso.maquina_id || ''}
+                                        onChange={(e) => handleProcessChange(
                                             ot.orden_trabajo,
                                             proceso.id,
-                                            "maquina",
+                                            "maquina_id",
                                             e.target.value
                                             
                                         )}
                                         >
-                                            {maquinas.map(maquina => (
-                                                <option key={maquina.id} value={maquina.id}>
-                                                    {maquina.descripcion}
-                                                </option>
-                                            ))}
+                                            <option value="">Seleccione una máquina</option>
+                                            {maquinas && maquinas.length > 0 ? (
+                                                maquinas.map(maquina => (
+                                                    <option 
+                                                        value={maquina.id} 
+                                                        key={maquina.id}
+                                                    >
+                                                        {maquina.codigo_maquina} - {maquina.descripcion}
+                                                    </option>
+                                                ))
+                                            ) : (
+                                                <option disabled>No hay máquinas disponibles</option>
+                                            )};
                                         </select>
                                     </td>
                                     <td>
@@ -431,7 +458,7 @@ export function ProgramDetail() {
                                         type="number" 
                                         className="form-control"
                                         value={proceso.cantidad} 
-                                        onChange={(e) => handleProcessUpdate(
+                                        onChange={(e) => handleProcessChange(
                                             ot.orden_trabajo,
                                             proceso.id,
                                             'cantidad',

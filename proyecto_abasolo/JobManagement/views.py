@@ -606,37 +606,114 @@ def get_next_working_day(date):
         next_day += timedelta(days=1)
     return next_day
 
-def calculate_working_days(start_date, cantidad, estandar):
-    """Calcula los intervalos de trabajo diarios considerando solo días laborales"""
-    current_date = start_date
-    # Si la fecha inicial no es día laboral, mover al siguiente día laboral
-    while not is_working_day(current_date):
-        current_date = get_next_working_day(current_date)
+def calculate_working_days(start_datetime, cantidad, estandar):
+    """
+    Calcula los intervalos de trabajo considerando horas dentro del mismo día.
     
-    remaining_units = cantidad
+    Args:
+        start_datetime: datetime o date - Fecha/hora de inicio
+        cantidad: float - Cantidad de unidades a producir
+        estandar: float - Estándar de producción (unidades por día)
+    
+    Returns:
+        dict: Diccionario con fechas de inicio, fin e intervalos
+    """
+    # Asegurar que start_datetime sea datetime
+    if not isinstance(start_datetime, datetime):
+        start_datetime = datetime.combine(start_datetime, time(7, 45))
+    
+    # Variables de control
+    current_datetime = start_datetime
+    remaining_units = float(cantidad)
     intervals = []
     
-    while remaining_units > 0:
-        if is_working_day(current_date):
-            units_today = min(remaining_units, estandar)
-            # Crear fecha con hora de inicio (8:00) y fin (17:00) del día
-            start_datetime = datetime.combine(current_date, time(7, 45))  # 8:00 AM
-            end_datetime = datetime.combine(current_date, time(17, 45))   # 5:00 PM
-            
-            intervals.append({
-                'fecha': current_date,
-                'fecha_inicio': start_datetime,
-                'fecha_fin': end_datetime,
-                'unidades': units_today,
-                'unidades_restantes': remaining_units - units_today
-            })
-            remaining_units -= units_today
-        
-        current_date = get_next_working_day(current_date)
+    # Constantes de horario laboral
+    WORKDAY_START = time(7, 45)  # 7:45 AM
+    WORKDAY_END = time(17, 45)   # 5:45 PM
+    WORKDAY_HOURS = 10  # Horas entre 7:45 y 17:45
     
+    # Calcular unidades por hora
+    units_per_hour = estandar / WORKDAY_HOURS
+    
+    try:
+        while remaining_units > 0:
+            current_date = current_datetime.date()
+            
+            # Verificar si es día laboral
+            if not is_working_day(current_date):
+                current_datetime = datetime.combine(get_next_working_day(current_date), WORKDAY_START)
+                continue
+            
+            # Definir inicio y fin del día laboral actual
+            day_start = datetime.combine(current_date, WORKDAY_START)
+            day_end = datetime.combine(current_date, WORKDAY_END)
+            
+            # Ajustar current_datetime si está fuera del horario laboral
+            if current_datetime.time() < WORKDAY_START:
+                current_datetime = day_start
+            elif current_datetime.time() >= WORKDAY_END:
+                next_day = get_next_working_day(current_date)
+                current_datetime = datetime.combine(next_day, WORKDAY_START)
+                continue
+            
+            # Calcular horas disponibles hasta el fin del día
+            hours_available = (day_end - current_datetime).seconds / 3600
+            
+            # Calcular unidades posibles en el tiempo disponible
+            possible_units = hours_available * units_per_hour
+            units_this_interval = min(remaining_units, possible_units)
+            
+            if units_this_interval > 0:
+                # Calcular duración necesaria para las unidades
+                hours_needed = units_this_interval / units_per_hour
+                end_datetime = current_datetime + timedelta(hours=hours_needed)
+                
+                # Ajustar si excede el fin del día laboral
+                if end_datetime > day_end:
+                    end_datetime = day_end
+                    actual_hours = (end_datetime - current_datetime).seconds / 3600
+                    units_this_interval = actual_hours * units_per_hour
+                
+                # Crear intervalo
+                intervals.append({
+                    'fecha': current_date,
+                    'fecha_inicio': current_datetime,
+                    'fecha_fin': end_datetime,
+                    'unidades': units_this_interval,
+                    'unidades_restantes': remaining_units - units_this_interval
+                })
+                
+                # Actualizar variables de control
+                remaining_units -= units_this_interval
+                current_datetime = end_datetime
+                
+                # Si terminamos el día, preparar para el siguiente
+                if current_datetime >= day_end:
+                    next_day = get_next_working_day(current_date)
+                    current_datetime = datetime.combine(next_day, WORKDAY_START)
+            else:
+                # Si no podemos procesar unidades, ir al siguiente día
+                next_day = get_next_working_day(current_date)
+                current_datetime = datetime.combine(next_day, WORKDAY_START)
+                
+    except Exception as e:
+        print(f"Error en calculate_working_days: {str(e)}")
+        return {
+            'start_date': start_datetime.date(),
+            'end_date': start_datetime.date(),
+            'intervals': []
+        }
+
+    if not intervals:
+        return {
+            'start_date': start_datetime.date(),
+            'end_date': start_datetime.date(),
+            'intervals': []
+        }
+
     return {
-        'start_date': intervals[0]['fecha'] if intervals else start_date,
-        'end_date': intervals[-1]['fecha'] if intervals else start_date,
+        'start_date': intervals[0]['fecha'],
+        'end_date': intervals[-1]['fecha'],
         'intervals': intervals
     }
 
@@ -671,23 +748,32 @@ def generate_routes_data(program):
         }
 
         ruta_items = ruta.items.all().order_by('item')
-        
-        fecha_inicio = ot.fecha_emision or ot.fecha_proc or program.fecha_inicio
-        fecha_actual = fecha_inicio
+        fecha_actual = datetime.combine(
+            ot.fecha_emision or ot.fecha_proc or program.fecha_inicio,
+            time(7, 45)
+        )
+        unidades_procesadas = {0: 0}
 
-        for item_ruta in ruta_items:
+        for i, item_ruta in enumerate(ruta_items):
             proceso = item_ruta.proceso
             maquina = item_ruta.maquina
 
             proceso_id = f"proc_{item_ruta.id}"
             ot_group["procesos"].append({
                 "id": proceso_id,
-                "descripcion": f"{proceso.descripcion} - {maquina.descripcion}",
+                "descripcion": f"{proceso.descripcion} - {maquina.descripcion if maquina else 'Sin máquina'}",
                 "item": item_ruta.item
             })
 
             if item_ruta.estandar <= 0:
                 item_ruta.estandar = 500
+
+            # Para el primer proceso, todas las unidades están disponibles
+            if i == 0:
+                unidades_disponibles = item_ruta.cantidad_pedido
+            else:
+                # Para los siguientes procesos, solo pueden procesar las unidades que ya pasaron por el proceso anterior
+                unidades_disponibles = unidades_procesadas[i-1]
 
             # Calcular fechas e intervalos
             dates_data = calculate_working_days(
@@ -702,7 +788,7 @@ def generate_routes_data(program):
                     "id": f'item_{item_ruta.id}_{idx}',
                     "ot_id": f"ot_{ot.id}",
                     "proceso_id": proceso_id,
-                    "name": f"{proceso.descripcion} - {interval['unidades']} de {item_ruta.cantidad_pedido} unidades",
+                    "name": f"{proceso.descripcion} - {interval['unidades']:.0f} de {item_ruta.cantidad_pedido} unidades",
                     "start_time": interval['fecha_inicio'].strftime('%Y-%m-%d %H:%M:%S'),
                     "end_time": interval['fecha_fin'].strftime('%Y-%m-%d %H:%M:%S'),
                     "cantidad_total": float(item_ruta.cantidad_pedido),
@@ -711,7 +797,21 @@ def generate_routes_data(program):
                     "estandar": item_ruta.estandar
                 })
 
-            fecha_actual = get_next_working_day(dates_data['end_date'])
+                # Actualizar unidades procesadas para el siguiente proceso
+                if i not in unidades_procesadas:
+                    unidades_procesadas[i] = 0
+                unidades_procesadas[i] += interval['unidades']
+
+            # Actualizar fecha_actual al último tiempo de finalización
+            if dates_data['intervals']:
+                fecha_actual = dates_data['intervals'][-1]['fecha_fin']
+                # Si hay tiempo disponible en el día actual, mantener la fecha
+                if fecha_actual.time() < time(17, 45):
+                    continue
+                else:
+                    # Si no hay tiempo disponible, ir al siguiente día laboral
+                    next_day = get_next_working_day(fecha_actual.date())
+                    fecha_actual = datetime.combine(next_day, time(7, 45))
 
         groups.append(ot_group)
 
@@ -756,8 +856,19 @@ class UpdatePriorityView(APIView):
                             for proceso in order['procesos']:
                                 try:
                                     item_ruta = ItemRuta.objects.get(id=proceso['id'])
-                                    item_ruta.estandar = proceso.get('estandar', item_ruta.estandar)
+                                    if 'estandar' in proceso:
+                                        item_ruta.estandar = proceso['estandar']
+
+                                    if 'maquina_id' in proceso and proceso['maquina_id']:
+                                        try:
+                                            maquina = Maquina.objects.get(id=proceso['maquina_id'])
+                                            item_ruta.maquina = maquina
+                                        except Maquina.DoesNotExist:
+                                            error_details.append(f"Maquina {proceso['maquina_id']} no encontrada")
+                                            success['errors'] += 1
+
                                     item_ruta.save()
+
                                 except ItemRuta.DoesNotExist as e:
                                     error_details.append(f"ItemRuta {proceso['id']} no encontrado")
                                     success['errors'] += 1
@@ -936,9 +1047,11 @@ from django.views.decorators.csrf import csrf_exempt
 class ProgramDetailView(APIView):
     def get(self, request, pk):
         try:
+            print(f"Iniciando obtención de programa {pk}")
             program = ProgramaProduccion.objects.get(id=pk)
             serializer = ProgramaProduccionSerializer(program)
 
+            print(f"Obteniendo órdenes de trabajo para programa {pk}")
             program_ots = ProgramaOrdenTrabajo.objects.filter(
                 programa=program
             ).select_related(
@@ -952,104 +1065,118 @@ class ProgramDetailView(APIView):
 
             ordenes_trabajo = []
             for prog_ot in program_ots:
-                ot = prog_ot.orden_trabajo
-                ruta =getattr(ot, 'ruta_ot', None)
+                try:
+                    ot = prog_ot.orden_trabajo
+                    ruta = getattr(ot, 'ruta_ot', None)
 
-                if not ruta:
+                    if not ruta:
+                        print(f"OT {ot.codigo_ot} no tiene ruta asociada")
+                        continue
+
+                    # Obtener y ordenar los items de la ruta
+                    ruta_items = ruta.items.all().order_by('item')
+
+                    # Preparar los datos de los procesos
+                    procesos = []
+                    for item_ruta in ruta_items:
+                        try:
+                            procesos.append({
+                                'id': item_ruta.id,
+                                'item': item_ruta.item,
+                                'codigo_proceso': item_ruta.proceso.codigo_proceso,
+                                'descripcion': item_ruta.proceso.descripcion,
+                                'maquina_id': item_ruta.maquina.id if item_ruta.maquina else None,
+                                'maquina_descripcion': item_ruta.maquina.descripcion if item_ruta.maquina else None,
+                                'cantidad': item_ruta.cantidad_pedido,
+                                'estandar': item_ruta.estandar
+                            })
+                        except Exception as e:
+                            print(f"Error procesando item_ruta {item_ruta.id}: {str(e)}")
+                            continue
+
+                    ot_data = {
+                        'orden_trabajo': ot.id,
+                        'orden_trabajo_codigo_ot': ot.codigo_ot,
+                        'orden_trabajo_descripcion_producto_ot': ot.descripcion_producto_ot,
+                        'orden_trabajo_fecha_termino': ot.fecha_termino,
+                        'procesos': procesos,
+                    }
+
+                    ordenes_trabajo.append(ot_data)
+                except Exception as e:
+                    print(f"Error procesando OT {prog_ot.orden_trabajo.id}: {str(e)}")
                     continue
 
-                #Obtener y ordenar los items de la ruta
-                ruta_items = ruta.items.all().order_by('item')
-
-                #Preparar los datos de los procesos
-                procesos = []
-                for item_ruta in ruta_items:
-                    procesos.append({
-                        'id': item_ruta.id,
-                        'item': item_ruta.item,
-                        'codigo_proceso': item_ruta.proceso.codigo_proceso,
-                        'descripcion': item_ruta.proceso.descripcion,
-                        'maquina_id': item_ruta.maquina.id,
-                        'maquina_descripcion': item_ruta.maquina.descripcion,
-                        'cantidad': item_ruta.cantidad_pedido,
-                        'estandar': item_ruta.estandar
-                    })
-
-                ot_data = {
-                    'orden_trabajo': ot.id,
-                    'orden_trabajo_codigo_ot': ot.codigo_ot,
-                    'orden_trabajo_descripcion_producto_ot': ot.descripcion_producto_ot,
-                    'orden_trabajo_fecha_termino': ot.fecha_termino,
-                    'procesos': procesos,
-                }
-
-                ordenes_trabajo.append(ot_data)
-
+            print("Generando datos de rutas")
             groups = []
             items = []         
             
             for prog_ot in program_ots:
-                ot = prog_ot.orden_trabajo
-                ruta = getattr(ot, 'ruta_ot', None)
+                try:
+                    ot = prog_ot.orden_trabajo
+                    ruta = getattr(ot, 'ruta_ot', None)
 
-                if not ruta:
+                    if not ruta:
+                        continue
+
+                    ot_group = {
+                        "id": f"ot_{ot.id}",
+                        "orden_trabajo_codigo_ot": ot.codigo_ot,
+                        "descripcion": ot.descripcion_producto_ot,
+                        "procesos": []
+                    }
+
+                    ruta_items = ruta.items.all().order_by('item')
+                    fecha_inicio = ot.fecha_emision or ot.fecha_proc or program.fecha_inicio
+                    fecha_actual = fecha_inicio
+
+                    for item_ruta in ruta_items:
+                        try:
+                            proceso = item_ruta.proceso
+                            maquina = item_ruta.maquina
+
+                            proceso_id = f"proc_{item_ruta.id}"
+                            ot_group["procesos"].append({
+                                "id": proceso_id,
+                                "descripcion": f"{proceso.descripcion} - {maquina.descripcion if maquina else 'Sin máquina'}",
+                                "item": item_ruta.item
+                            })
+
+                            if item_ruta.estandar <= 0:
+                                item_ruta.estandar = 500
+
+                            # Calcular fechas e intervalos
+                            dates_data = calculate_working_days(
+                                fecha_actual,
+                                item_ruta.cantidad_pedido,
+                                item_ruta.estandar
+                            )
+
+                            # Crear un item por cada intervalo
+                            for idx, interval in enumerate(dates_data['intervals']):
+                                items.append({
+                                    "id": f'item_{item_ruta.id}_{idx}',
+                                    "ot_id": f"ot_{ot.id}",
+                                    "proceso_id": proceso_id,
+                                    "name": f"{proceso.descripcion} - {interval['unidades']} de {item_ruta.cantidad_pedido} unidades",
+                                    "start_time": interval['fecha_inicio'].strftime('%Y-%m-%d %H:%M:%S'),
+                                    "end_time": interval['fecha_fin'].strftime('%Y-%m-%d %H:%M:%S'),
+                                    "cantidad_total": float(item_ruta.cantidad_pedido),
+                                    "cantidad_intervalo": float(interval['unidades']),
+                                    "unidades_restantes": float(interval['unidades_restantes']),
+                                    "estandar": item_ruta.estandar
+                                })
+
+                            fecha_actual = get_next_working_day(dates_data['end_date'])
+                        except Exception as e:
+                            print(f"Error procesando item_ruta {item_ruta.id} para timeline: {str(e)}")
+                            continue
+
+                    groups.append(ot_group)
+                except Exception as e:
+                    print(f"Error procesando OT {prog_ot.orden_trabajo.id} para timeline: {str(e)}")
                     continue
 
-                ot_group = {
-                    "id": f"ot_{ot.id}",
-                    "orden_trabajo_codigo_ot": ot.codigo_ot,
-                    "descripcion": ot.descripcion_producto_ot,
-                    "procesos": []
-                }
-
-                ruta_items = ruta.items.all().order_by('item')
-
-                fecha_inicio = ot.fecha_emision or ot.fecha_proc or program.fecha_inicio
-                fecha_actual = fecha_inicio
-
-                procesos = []
-
-                for item_ruta in ruta_items:
-                    proceso = item_ruta.proceso
-                    maquina = item_ruta.maquina
-
-                    #Añadir proceso al grupo de la OT
-                    proceso_id = f"proc_{item_ruta.id}"
-                    ot_group["procesos"].append({
-                        "id": proceso_id,
-                        "descripcion": f"{proceso.descripcion} - {maquina.descripcion}",
-                        "item": item_ruta.item
-                    })
-
-                    if item_ruta.estandar <= 0:
-                        item_ruta.estandar = 500
-
-                    # Calcular fechas e intervalos
-                    dates_data = calculate_working_days(
-                        fecha_actual,
-                        item_ruta.cantidad_pedido,
-                        item_ruta.estandar
-                    )
-
-                    # Crear un item por cada intervalo
-                    for idx, interval in enumerate(dates_data['intervals']):
-                        items.append({
-                            "id": f'item_{item_ruta.id}_{idx}',
-                            "ot_id": f"ot_{ot.id}",
-                            "proceso_id": proceso_id,
-                            "name": f"{proceso.descripcion} - {interval['unidades']} de {item_ruta.cantidad_pedido} unidades",
-                            "start_time": interval['fecha_inicio'].strftime('%Y-%m-%d %H:%M:%S'),
-                            "end_time": interval['fecha_fin'].strftime('%Y-%m-%d %H:%M:%S'),
-                            "cantidad_total": float(item_ruta.cantidad_pedido),
-                            "cantidad_intervalo": float(interval['unidades']),
-                            "unidades_restantes": float(interval['unidades_restantes']),
-                            "estandar": item_ruta.estandar
-                        })
-
-                    fecha_actual = get_next_working_day(dates_data['end_date'])
-
-                groups.append(ot_group)
-            
             routes_data = {
                 "groups": groups,
                 "items": items
@@ -1061,14 +1188,19 @@ class ProgramDetailView(APIView):
                 "routes_data": routes_data
             }
             return Response(response_data, status=status.HTTP_200_OK)
+
         except ProgramaProduccion.DoesNotExist:
+            print(f"Programa {pk} no encontrado")
             return Response(
                 {"error": "Programa no encontrado"}, 
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
+            print(f"Error inesperado obteniendo programa {pk}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return Response(
-                {"error": str(e)},
+                {"error": f"Error interno del servidor: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     def get_ordenes(self, program):
@@ -1185,22 +1317,35 @@ class ProgramDetailView(APIView):
                 dia_actual = dia_termino
         return resultados
 
-   
 
-
+from .serializers import MaquinaSerializer
 
 class MaquinasView(APIView):
-    def get(self, request):
+    def get(self, request, pk=None):
         try:
-            maquinas = Maquina.objects.all().order_by('codigo_maquina')
-            data = [{
-                'id': maquina.id,
-                'descripcion': f'{maquina.codigo_maquina} - {maquina.descripcion}'
-            } for maquina in maquinas]
-            return Response(data, status=status.HTTP_200_OK)
+            programa = ProgramaProduccion.objects.get(pk=pk)
+            
+            ordenes_trabajo = ProgramaOrdenTrabajo.objects.filter(
+                programa=programa
+            ).values_list('orden_trabajo_id', flat=True)
+
+            maquinas = Maquina.objects.filter(
+                Q(empresa__isnull=False)
+            ).distinct().order_by('codigo_maquina')
+
+            serializer = MaquinaSerializer(maquinas, many=True)
+
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ProgramaProduccion.DoesNotExist:
+            return Response(
+                {'error':'Programa no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         except Exception as e:
-            return Response({'error': str(e)}, 
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -1226,3 +1371,110 @@ def get_unassigned_ots(request):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
+"""
+def calculate_working_days(start_date, cantidad, estandar):
+    
+    if not isinstance(start_date, datetime):
+        start_date = datetime.combine(start_date, time(7, 45))
+    
+    current_date = start_date.date()
+    remaining_units = float(cantidad)
+    intervals = []
+    
+    #Definir horario laboral (en horas)
+    WORKDAY_START = time(7, 45)
+    WORKDAY_END = time(17, 45)
+    
+    # Si la fecha inicial no es día laboral, mover al siguiente día laboral
+    while not is_working_day(current_date):
+        current_date = get_next_working_day(current_date)
+    
+    try:
+         #Calcular las horas laborales por día
+        workday_start_dt = datetime.combine(current_date, WORKDAY_START)
+        workday_end_dt = datetime.combine(current_date, WORKDAY_END)
+        HOURS_PER_DAY = (workday_end_dt - workday_start_dt).seconds / 3600
+
+        #Calcular unidades por hora basado en el estandar diario
+        units_per_hour = float(estandar) / HOURS_PER_DAY if HOURS_PER_DAY > 0 else 0
+        
+        #Inicializar current_datetime con la hora de inicio
+        current_datetime = datetime.combine(current_date, WORKDAY_START)
+        
+        while remaining_units > 0:
+            if is_working_day(current_date):
+                workday_end_datetime = datetime.combine(current_date, WORKDAY_END)
+
+                while current_datetime < workday_end_datetime and remaining_units > 0:
+                    try:
+                        #Calcular unidades para la próxima hora
+                        units_this_interval = min(remaining_units, units_per_hour)
+
+                        if units_per_hour > 0:
+                            hours_needed = units_this_interval / units_per_hour
+                            #Calcular tiempo de finalización para estas unidades
+                            minutes_needed = (hours_needed * 60)
+                            end_datetime = current_datetime + timedelta(minutes=minutes_needed)
+
+                            #Si el tiempo final excede el día laboral, ajustar 
+                            if end_datetime > workday_end_datetime:
+                                end_datetime = workday_end_datetime
+                                time_diff = (end_datetime - current_datetime).seconds / 3600 #diferencia en horas
+                                units_this_interval = time_diff * units_per_hour
+                        else:
+                            end_datetime = current_datetime + timedelta(hours=1)
+                            if end_datetime > workday_end_datetime:
+                                end_datetime = workday_end_datetime
+
+                        intervals.append({
+                            'fecha': current_date,
+                            'fecha_inicio': current_datetime,
+                            'fecha_fin': end_datetime,
+                            'unidades': units_this_interval,
+                            'unidades_restantes': remaining_units - units_this_interval
+                        })
+
+                        remaining_units -= units_this_interval
+                        current_datetime = end_datetime
+
+                        
+                        #Si llegamos al final del día, reiniciar para el siguiente
+                        if current_datetime >= workday_end_datetime:
+                            current_date = get_next_working_day(current_date)
+                            current_datetime = datetime.combine(current_date, WORKDAY_START)
+                            break
+                        
+                    except Exception as e:
+                        print(f'Error en el cálculo de intervalo: {str(e)}')
+                        break
+
+                #Si aun no hemos terminado y llegamos al final del día
+                if remaining_units >0 and current_datetime >= workday_end_datetime:
+                    current_date = get_next_working_day(current_date)
+                    current_datetime = datetime.combine(current_date, WORKDAY_START)
+            else:
+                current_date = get_next_working_day(current_date)
+                current_datetime = datetime.combine(current_date, WORKDAY_START)
+    except Exception as e:
+        print(f'Error en calculate_working_days: {str(e)}')    
+        return {
+            'start_date': start_date.date(),
+            'end_date': start_date.date(),
+            'intervals': []
+        }
+    
+    if not intervals:
+        return {
+            'start_date': start_date.date(),
+            'end_date': start_date.date(),
+            'intervals': []
+        }
+
+    return {
+        'start_date': intervals[0]['fecha'],
+        'end_date': intervals[-1]['fecha'],
+        'intervals': intervals
+    }
+
+
+"""

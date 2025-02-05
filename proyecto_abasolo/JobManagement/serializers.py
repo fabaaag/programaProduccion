@@ -20,7 +20,7 @@ class MaquinaSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Maquina
-        fields = '__all__'
+        fields = ['id', 'codigo_maquina', 'descripcion', 'empresa']
 
 class ProcesoSerializer(serializers.ModelSerializer):
     empresa = EmpresaOTSerializer()

@@ -1,6 +1,5 @@
 import axios from "axios";
 
-
 const programsApi = axios.create({
     baseURL:'http://localhost:8000/gestion/api/v1/programas/'
 })
@@ -18,6 +17,7 @@ export const deleteProgram = async (id) => {
       throw error
   }
 };
+
 export const updateProgram = (id, program) => programsApi.put(`/${id}/`, program);
 export const getProgram = async (programId) => {
     try {
@@ -29,9 +29,6 @@ export const getProgram = async (programId) => {
     }
   };
 
-
-  
-import Cookies from 'js-cookie';
   
 export const updatePriorities = async (programId, orderIds) => {
   try {
@@ -71,6 +68,20 @@ export const deleteOrder = async (programId, orderId) => {
     if (error.response){
       throw error.response.data;
     }
+    throw error;
+  }
+};
+
+
+export const getMaquinas = async (programId) => {
+  if(!programId){
+    throw new Error("Se requiere un ID de programa");
+  }
+  try{
+    const response = await programsApi.get(`${programId}/maquinas/`);
+    return response.data;
+  }catch(error){
+    console.error("Error fetching maquinas:", error);
     throw error;
   }
 };
