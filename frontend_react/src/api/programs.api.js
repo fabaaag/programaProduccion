@@ -86,6 +86,31 @@ export const getMaquinas = async (programId) => {
   }
 };
 
+export const generateProgramPDF = async (programId) => {
+  try{
+    const response = await programsApi.get(`${programId}/generar_pdf/`, {
+      responseType: 'blob'
+    });
+
+    //Crear URL del blob y forzar la descarga
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `programa_${programId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+    return true;
+  } catch(error){
+    console.error('Error generando PDF:', error);
+    throw error;
+  }
+};
+
+
 /*import axios from 'axios';
 
 // Suponiendo que el CSRF token está en una meta etiqueta
