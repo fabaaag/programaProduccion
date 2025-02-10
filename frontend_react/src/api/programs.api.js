@@ -10,7 +10,7 @@ export const getAllPrograms = () => programsApi.get('/');
 
 export const deleteProgram = async (id) => {
   try {
-      const response = await programsApi.delete(`/${id}/`);
+      const response = await programsApi.delete(`/${id}/delete/`);
       return response.data
   } catch (error) {
       console.log("Error eliminando programas:", error)

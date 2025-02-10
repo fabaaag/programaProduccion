@@ -39,15 +39,30 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
+    'rest_framework_simplejwt',
+    'UserManagement',
     'Client',
     'JobManagement',
     'Operator',
     'Product',
     'Utils',
+    'Machine'
 
 ]
 
+AUTH_USER_MODEL = 'UserManagement.CustomUser'
 
+#Configuración de autenticación
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'home'
+LOGOUT_REDIRECT_URL = 'login'
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framewokr_simplejwt.authentication.JWTAuthentication',
+    )
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

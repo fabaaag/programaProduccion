@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getAllPrograms } from "../../api/programs.api.js";
+import { getAllPrograms, deleteProgram } from "../../api/programs.api.js";
 import CompNavbar from "../Navbar/CompNavbar.jsx";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";

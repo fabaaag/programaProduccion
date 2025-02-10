@@ -429,16 +429,30 @@ class ProgramListView(generics.ListAPIView):
 
     def delete(self, request, pk):
         try:
-            programa = ProgramaProduccion.object.get(id=pk)
+            print(f"Intentando eliminar el programa con ID: {pk}")
+            programa = ProgramaProduccion.objects.get(id=pk)
+
+            ordenes_asociadas = ProgramaOrdenTrabajo.objects.filter(programa=programa)
+            if ordenes_asociadas.exists():
+                ordenes_asociadas.delete()
+                print(f"Ordenes de trabajo asociadas eliminadas para programa {pk}")
+            
             programa.delete()
+            print(f"Programa {pk} eliminado exitosamente")
             return Response({
                 "message": "Programa eliminado corretamente"
             }, status=status.HTTP_200_OK)
+        
         except ProgramaProduccion.DoesNotExist:
+            print(f"Programa {pk} no encontrado")
             return Response({
                 "error": "Programa no encontrado"
             }, status=status.HTTP_404_NOT_FOUND)
+        
         except Exception as e:
+            print(f"Error al eliminar el programa {pk}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return Response({
                 "error": f"Error al eliminar el programa: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -837,23 +851,9 @@ def generate_routes_data(program):
              #   process_timeline[maquina_id] = dates_data['intervals'][-1]['fecha_fin']
 
 
-class UpdatePriorityView(APIView):
-    def put(self, request, pk): 
-        try:
-            # Log de los datos recibidos
-            print("Datos recibidos:", request.data)
-            
-            programa = ProgramaProduccion.objects.get(id=pk)
-            order_data = request.data.get("order_ids", [])
-            recalculate_dates = request.data.get("recalculate_dates", False)
 
-            if not isinstance(order_data, list):
-                return Response(
-                    {"error": "Formato incorrecto. 'order_ids' debe ser una lista de IDs."}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            success = {'updated': 0, 'errors': 0}
+"""
+success = {'updated': 0, 'errors': 0}
             error_details = []
             
             with transaction.atomic():
@@ -973,6 +973,207 @@ class UpdatePriorityView(APIView):
                 "message": "Error al actualizar las prioridades y estándares.",
                 "error": str(e),
                 "error_details": error_details
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+"""
+
+class UpdatePriorityView(APIView):
+    def put(self, request, pk): 
+        try:
+            # Log de los datos recibidos
+            print("Datos recibidos:", request.data)
+            
+            programa = ProgramaProduccion.objects.get(id=pk)
+            order_data = request.data.get("order_ids", [])
+            recalculate_dates = request.data.get("recalculate_dates", False)
+
+            if not isinstance(order_data, list):
+                return Response(
+                    {"error": "Formato incorrecto. 'order_ids' debe ser una lista de IDs."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            #Si solo es reordenamiento, usar método específico
+            if not recalculate_dates:
+                return self.handle_reorder(programa, order_data) 
+
+            #Si hay recálculo de fechas, usar método existente
+            return self.handle_update_with_recalculation(programa, order_data)
+
+        except ProgramaProduccion.DoesNotExist:
+            return Response(
+                {'error': f'El programa con ID {pk} no existe.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            print(f"Error inesperado: {str(e)}")
+            return Response({
+                "message": "Error al actualizar las prioridades y estándares.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    def handle_reorder(self, programa, order_data):
+        """Maneja solo el reordenamiento de prioridades"""
+
+        try:
+            with transaction.atomic():
+                for index, order in enumerate(order_data):
+                    prog_ot = ProgramaOrdenTrabajo.objects.get(
+                        programa=programa,
+                        orden_trabajo_id=order['id']
+                    )
+                    prog_ot.prioridad = index + 1
+                    prog_ot.save()
+
+            #Obtener datos actualizados
+            program_ots = ProgramaOrdenTrabajo.objects.filter(
+                programa=programa
+            ).select_related(
+                'orden_trabajo'
+            ).order_by('prioridad')
+
+            ordenes_trabajo = []
+            for prog_ot in program_ots:
+                ot = prog_ot.orden_trabajo
+                ordenes_trabajo.append({
+                    'orden_trabajo': ot.id,
+                    'orden_trabajo_codigo_ot': ot.codigo_ot,
+                    'orden_trabajo_descripcion_producto_ot': ot.descripcion_producto_ot
+                })
+
+            return Response({
+                "message": "Prioridades actualizadas correctamente",
+                "ordenes_trabajo": ordenes_trabajo
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(f"Error en handle_reorder: {str(e)}")
+            return Response({
+                "error": f"Error al reordenar: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+    def handle_update_with_recalculation(self, programa, order_data):
+        """Maneja actualizaciones que requieren recálculo de fechas"""
+        success = {'updated': 0, 'errors': 0}
+        error_details = []
+
+        try:
+            with transaction.atomic():
+                for order in order_data:
+                    try:
+                        print(f"Procesando orden: {order}")
+                        prog_ot = ProgramaOrdenTrabajo.objects.get(
+                            programa=programa,
+                            orden_trabajo_id=order['id']
+                        )
+                        prog_ot.prioridad = order['priority']
+                        prog_ot.save()
+                        success['updated'] += 1
+
+                         # Procesar los cambios en los procesos
+                        if 'procesos' in order:
+                            for proceso in order['procesos']:
+                                try:
+                                    # Obtener el ItemRuta correspondiente
+                                    item_ruta = ItemRuta.objects.get(id=proceso['id'])
+                                    
+                                    # Actualizar el estándar si viene en los datos
+                                    if 'estandar' in proceso and proceso['estandar'] is not None:
+                                        print(f"Actualizando estándar para proceso {proceso['id']}: {proceso['estandar']}")
+                                        item_ruta.estandar = proceso['estandar']
+
+                                    # Actualizar la máquina si viene en los datos
+                                    if 'maquina_id' in proceso and proceso['maquina_id']:
+                                        try:
+                                            maquina = Maquina.objects.get(id=proceso['maquina_id'])
+                                            item_ruta.maquina = maquina
+                                        except Maquina.DoesNotExist:
+                                            error_details.append(f"Máquina {proceso['maquina_id']} no encontrada")
+                                            success['errors'] += 1
+
+                                    # Guardar los cambios
+                                    item_ruta.save()
+                                    print(f"ItemRuta {proceso['id']} actualizado correctamente")
+
+                                except ItemRuta.DoesNotExist:
+                                    error_details.append(f"ItemRuta {proceso['id']} no encontrado")
+                                    success['errors'] += 1
+                                except Exception as e:
+                                    error_details.append(f"Error al actualizar ItemRuta {proceso['id']}: {str(e)}")
+                                    success['errors'] += 1
+                    
+                    except ProgramaOrdenTrabajo.DoesNotExist as e:
+                        error_details.append(f"ProgramaOrdenTrabajo no encontrado para orden {order['id']}")
+                        success['errors'] += 1
+                    except Exception as e:
+                        error_details.append(f"Error procesando orden {order['id']}: {str(e)}")
+                        success['errors'] += 1
+
+                try:
+                    #Obtener datos actualizados de las OTs
+                    programa_ots = ProgramaOrdenTrabajo.objects.filter(
+                        programa=programa
+                    ).select_related(
+                        'orden_trabajo',
+                        'orden_trabajo__ruta_ot'
+                    ).prefetch_related(
+                        'orden_trabajo__ruta_ot__items',
+                        'orden_trabajo__ruta_ot__items__proceso',
+                        'orden_trabajo__ruta_ot__items__maquina',
+                    ).order_by('prioridad')
+
+                    ordenes_trabajo = []
+                    for prog_ot in programa_ots:
+                        ot = prog_ot.orden_trabajo
+                        ot_data = {
+                            'orden_trabajo': ot.id,
+                            'orden_trabajo_codigo_ot': ot.codigo_ot,
+                            'orden_trabajo_descripcion_producto_ot': ot.descripcion_producto_ot,
+                            'procesos': []
+                        }
+
+                        ruta = getattr(ot, 'ruta_ot', None)
+
+                        if ruta:
+                            for item in ruta.items.all().order_by('item'):
+                                ot_data['procesos'].append({
+                                    'id': item.id,
+                                    'item': item.item,
+                                    'codigo_proceso': item.proceso.codigo_proceso,
+                                    'descripcion': item.proceso.descripcion,
+                                    'maquina_id': item.maquina.id if item.maquina else None,
+                                    'cantidad': item.cantidad_pedido,
+                                    'estandar': item.estandar
+                                })
+                        ordenes_trabajo.append(ot_data)
+
+                    try:
+                        routes_data = generate_routes_data(programa)
+                    except Exception as route_error:
+                        print(f"Error al generar routes_data: {str(route_error)}")
+                        routes_data = None
+                        error_details.append(f"Error al generar datos de rutas: {str(route_error)}")
+
+                    return Response({
+                        "message": "Prioridades actualizadas correctamente",
+                        "result": success,
+                        "error_details": error_details,
+                        "routes_data": routes_data,
+                        "ordenes_trabajo": ordenes_trabajo
+                    }, status=status.HTTP_200_OK)
+                
+                except Exception as e:
+                    error_details.append(f"Error al procesar datos actualizados: {str(e)}")
+                    return Response({
+                        "error": f"Error en actualización con recálculo: {str(e)}",
+                        "error_details": error_details
+                    }, status=status.HTTP_500_INTERVAL_SERVER_ERROR)
+
+        except Exception as e:
+            print(f"Error en handle_update_with_recalculation: {str(e)}")
+            return Response({
+                "error": f"Error en actualización con recálculo: {str(e)}",
+                "error details": error_details
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def update_prio(self, pk, order_ids):
@@ -1406,7 +1607,7 @@ def get_unassigned_ots(request):
 
 from django.http import HttpResponse
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import landscape, A3
+from reportlab.lib.pagesizes import landscape, A3, A2, A1
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
@@ -1433,7 +1634,7 @@ class GenerateProgramPDF(APIView):
             buffer = io.BytesIO()
             doc = SimpleDocTemplate(
                 buffer,
-                pagesize=landscape(A3),
+                pagesize=landscape(A1),
                 rightMargin=30,
                 leftMargin=30,
                 topMargin=30,
@@ -1444,12 +1645,12 @@ class GenerateProgramPDF(APIView):
             styles = getSampleStyleSheet()
 
             #Preparar datos para la tabla
-            table_data = []
+            #table_data = []
 
             #Obtener rango de fechas para el calendario
             min_date = None
             max_date = None
-            all_processes = []
+            all_data = []
 
 
         
@@ -1462,7 +1663,12 @@ class GenerateProgramPDF(APIView):
                     continue
 
                 ruta_items = ruta.items.all().order_by('item')
+
                 for item_ruta in ruta_items:
+                    if not item_ruta.proceso or not item_ruta.cantidad_pedido:
+                        continue
+
+
                     dates_data = calculate_working_days(
                         ot.fecha_emision or programa.fecha_inicio,
                         item_ruta.cantidad_pedido,
@@ -1478,11 +1684,19 @@ class GenerateProgramPDF(APIView):
                         if max_date is None or end_date > max_date:
                             max_date = end_date
 
-                        all_processes.append({
-                            'ot': ot,
-                            'item_ruta': item_ruta,
-                            'dates_data': dates_data
+                        all_data.append({
+                            'ot_codigo': ot.codigo_ot,
+                            'ot_descripcion': ot.descripcion_producto_ot,
+                            'item':item_ruta.item,
+                            'proceso': item_ruta.proceso.descripcion,
+                            'maquina': item_ruta.maquina.descripcion if item_ruta.maquina else 'Sin máquina',
+                            'cantidad': item_ruta.cantidad_pedido,
+                            'estandar': item_ruta.estandar if item_ruta.estandar > 0 else 500,
+                            'fecha_inicio': start_date,
+                            'fecha_fin': end_date,
+                            'intervals': dates_data['intervals']
                         })
+
             #Generar fechas para el calendario
             calendar_dates = []
             current_date = min_date
@@ -1490,39 +1704,42 @@ class GenerateProgramPDF(APIView):
                 calendar_dates.append(current_date)
                 current_date += timedelta(days=1)
 
+            #Crear tabla
+            table_data = []
+
+
             #Crear encabezados de la tabla
-            headers = ['OT', 'Item', 'Proceso', 'Maquina', 'Cantidad', 'Estandar']
+            headers = ['OT', 'Item', 'Proceso', 'Maquina', 'Cantidad', 'Estandar', 'Fecha Inicio', 'Fecha Fin']
             headers.extend([d.strftime('%d/%m') for d in calendar_dates])
             table_data.append(headers)
             
             #Agregar datos de procesos
-            for process in all_processes:
-                ot = process['ot']
-                item_ruta = process['item_ruta']
-                dates_data = process['dates_data']
-
+            for data in all_data:
                 row = [
-                    f"{ot.codigo_ot}\n{ot.descripcion_producto_ot}",
-                    str(item_ruta.item),
-                    f"{item_ruta.proceso.descripcion}",
-                    f"{item_ruta.maquina.descripcion if item_ruta.maquina else 'Sin máquina'}",
-                    str(item_ruta.cantidad_pedido),
-                    str(item_ruta if item_ruta.estandar > 0 else 500)
+                    f"{data['ot_codigo']}\n{data['ot_descripcion']}",
+                    str(data['item']),
+                    data['proceso'],
+                    data['maquina'],
+                    str(data['cantidad']),
+                    str(data['estandar']),
+                    data['fecha_inicio'].strftime('%d/%m/%Y'),
+                    data['fecha_fin'].strftime('%d/%m/%Y')
                 ]
                 #Agregar datos del calendario
                 for date in calendar_dates:
-                    #Buscar si hay producción en esta fecha
-                    production = next(
-                        (interval['unidades'] for interval in dates_data['intervals']
-                        if interval['fecha_inicio'].date() <= date <= interval['fecha_fin'].date()
-                        ), ''
-                    )
-                row.append(str(int(production)if production else ' '))
+                    production = ''
+                    for interval in data['intervals']:
+                        interval_start = interval['fecha_inicio'].date()
+                        interval_end = interval['fecha_fin'].date()
+                        if interval_start <= date <= interval_end:
+                            production = str(int(interval['unidades']))
+                            break
+                    row.append(production)
 
-            table_data.append(row);
+                table_data.append(row)
 
             #Crear tabla
-            col_widths = [2*inch, 0.5*inch, 1.5*inch, 1.5*inch, inch, inch] + [0.4*inch] * len(calendar_dates)
+            col_widths = [3.5*inch, 0.5*inch, 2*inch, 2.5*inch, inch, inch, 1.2*inch, 1.2*inch] + [0.4*inch] * len(calendar_dates)
             table = Table(table_data, colWidths=col_widths)
 
             #Estuki de ka tabka
