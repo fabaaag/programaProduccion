@@ -64,5 +64,5 @@ class CustomUser(AbstractUser):
             elif self.rol == 'SUPERVISOR':
                 self.groups.add(Group.objects.get(name='Supervisores'))
             elif self.rol== 'OPERADOR':
-                self.groups.add(Group.objects.gate(name='Operadores'))
+                self.groups.add(Group.objects.get(name='Operadores'))
 

@@ -45,7 +45,7 @@ class ProductoSerializer(serializers.ModelSerializer):
     subfamilia_producto = SubfamiliaProductoSerializer()
     ficha_tecnica = FichaTecnicaSerializer()
     rutas = RutaSimpleSerializer(many=True, read_only=True) 
-    unidad_medida = MeasurementUnitSerializer()
+    und_medida = MeasurementUnitSerializer()
 
     class Meta:
         model = Producto
@@ -67,7 +67,7 @@ class PiezaSerializer(serializers.ModelSerializer):
     subfamilia_producto = SubfamiliaProductoSerializer()
     ficha_tecnica = FichaTecnicaSerializer()
     rutas = RutaPiezaSimpleSerializer(many=True, read_only=True)
-    unidad_medida = MeasurementUnitSerializer()
+    und_medida = MeasurementUnitSerializer()
 
     class Meta:
         model = Pieza

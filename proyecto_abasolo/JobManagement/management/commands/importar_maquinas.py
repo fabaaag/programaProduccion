@@ -6,7 +6,7 @@ class Command(BaseCommand):
     help = 'Importar datos desde un archivo .txt'
     
     def handle(self, *args, **kwargs):
-        path_file = ['W:\\maquina_indaval.txt', 'W:\\maquina_arco.txt']
+        path_file = ['W:\\maquina_indaval.txt']
         empresas_id = ['0', '2']
         encodings_to_try = ['utf-8', 'latin-1']
 

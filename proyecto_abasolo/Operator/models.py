@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from datetime import time, datetime, timedelta
 import holidays
 from pytz import timezone
-
+from django.conf import settings
 
 # Create your models here.
 from JobManagement.models import EmpresaOT, Maquina, Proceso #ItemRuta, ProgramaProduccion
@@ -20,8 +20,8 @@ class Operador(models.Model):
     empresa = models.ForeignKey(EmpresaOT, on_delete=models.CASCADE)
     activo = models.BooleanField(default=True)
     maquinas = models.ManyToManyField(Maquina, through='OperadorMaquina')
-    creado_por = models.ForeignKey(User, related_name='operadores_creados', on_delete=models.CASCADE, blank=True, null=True)
-    modificado_por = models.ForeignKey(User, related_name='operadores_modificados', on_delete=models.CASCADE, blank=True, null=True)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='operadores_creados', on_delete=models.CASCADE, blank=True, null=True)
+    modificado_por = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='operadores_modificados', on_delete=models.CASCADE, blank=True, null=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True, null=True)
     fecha_modificacion = models.DateField(auto_now=True, null=True)
 

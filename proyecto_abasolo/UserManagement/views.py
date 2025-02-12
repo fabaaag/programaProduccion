@@ -16,18 +16,30 @@ from .serializers import UserSerializer, UserCreateSerializer
 
 @api_view(['POST'])
 def login_api(request):
+    print(f"Datos recibidos: {request.data}")
     username = request.data.get('username')
     password = request.data.get('password')
 
+    print(f"Intentando autenticar usuario: {username}")
+
     user = authenticate(username=username, password=password)
+    print(f'Resultado de autenticación: {'Éxito' if user else 'Fallido'}')
 
     if user is not None:
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'token': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': UserSerializer(user).data
-        })
+        if user.is_active:
+            refresh = RefreshToken.for_user(user)
+            print(f"Token generado para usuario: {username}")
+            return Response({
+                'token': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': UserSerializer(user).data
+            })
+        else:
+            print(f"Usuario inactivo: {username}")
+            return Response(
+                {'error': 'Usuario inactivo'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
     else:
         return Response(
             {'error': 'Credenciales inválidas'},
@@ -51,6 +63,25 @@ def crear_operador_api(request):
         )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errores, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def profile_api(request):
+    if request.method == 'GET':
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data)
+    
+    elif request.method == 'PUT':
+        print("Datos recibidos:", request.data)
+        serializer = UserSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        print("Errores de validación:", serializer.errors)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

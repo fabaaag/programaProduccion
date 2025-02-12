@@ -1,6 +1,7 @@
 from django.db import models
 from JobManagement.models import Maquina
 from datetime import timezone
+from django.conf import settings
 
 # Create your models here.
 class TipoMaquina(models.Model):
@@ -42,7 +43,7 @@ class HistorialEstadoMaquina(models.Model):
     estado_nuevo = models.ForeignKey(EstadoOperatividad, on_delete=models.PROTECT, related_name='historial_nuevo')
     fecha_cambio = models.DateTimeField(auto_now_add=True)
     motivo_cambio = models.TextField()
-    usuario = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
 
     def __str__(self):
         return f"{self.maquina} - {self.estado_anterior} -> {self.estado_nuevo}"
@@ -91,7 +92,7 @@ class MantenimientoMaquina(models.Model):
     )
 
     creado_por = models.ForeignKey(
-        'auth.User',
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         related_name='mantenimientos_creados'

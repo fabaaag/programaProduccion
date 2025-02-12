@@ -24,7 +24,7 @@ class CustomUserCreationForm(UserCreationForm):
 
     class Meta:
         model = CustomUser
-        field = [
+        fields = [
             'username',
             'rut',
             'first_name',
@@ -53,7 +53,7 @@ class CustomUserChangeForm(UserChangeForm):
 
     class Meta:
         model = CustomUser
-        field = [
+        fields = [
             'first_name',
             'last_name',
             'email',

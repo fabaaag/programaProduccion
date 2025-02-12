@@ -49,7 +49,10 @@ class Command(BaseCommand):
                             codigo_maquina = row[3].strip()
                             maquina, _ = Maquina.objects.get_or_create(codigo_maquina=codigo_maquina)
 
-                            estandar = int(row[4].strip())
+                            if row[4].strip() != '':
+                                estandar = int(row[4].strip())
+                            else:
+                                estandar = 0
 
                             if producto:
                                 ruta, creado = Ruta.objects.update_or_create(

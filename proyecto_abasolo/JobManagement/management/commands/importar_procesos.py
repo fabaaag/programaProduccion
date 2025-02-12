@@ -6,7 +6,7 @@ class Command(BaseCommand):
     help = 'Importar datos desde un archivo .txt'
 
     def handle(self, *args, **kwargs):
-        path_file = ['W:\\procesos_ind.txt', 'W:\\procesos_arc.txt']
+        path_file = ['W:\\procesos_ind.txt']
         empresas_id = ['0', '2']
         encodings_to_try = ['utf-8', 'latin-1']
 
@@ -37,22 +37,52 @@ class Command(BaseCommand):
                                 empresa, _ = EmpresaOT.objects.get_or_create(codigo_empresa=codigo_empresa)
                                 print(empresa.nombre)
 
-                                proceso, creado = Proceso.objects.update_or_create(
-                                    codigo_proceso=codigo_proceso,
-                                    defaults={
-                                        'sigla': sigla,
-                                        'descripcion': descripcion,
-                                        'carga': carga,
-                                        'empresa': empresa
-                                    }
-                                )
+                                # Primero verificamos si existe el proceso con el mismo código pero en otra empresa
+                                try:
+                                    # Primero verificamos si existe el proceso con el mismo código pero en otra empresa
+                                    proceso_existente = Proceso.objects.filter(
+                                        codigo_proceso=codigo_proceso
+                                    ).exclude(empresa=empresa).exists()
 
-                                if creado:
-                                    self.stdout.write(self.style.SUCCESS(f'Proceso {codigo_proceso} creado.'))
+                                    if proceso_existente:
+                                        # Si existe en otra empresa, creamos uno nuevo agregando un sufijo al código
+                                        nuevo_codigo = f"{codigo_proceso}"
+                                        proceso = Proceso.objects.create(
+                                            codigo_proceso=nuevo_codigo,
+                                            empresa=empresa,
+                                            sigla=sigla,
+                                            descripcion=descripcion.strip(),  # Eliminamos espacios en blanco extras
+                                            carga=carga
+                                        )
+                                        print(f"Proceso {codigo_proceso} ya existe en otra empresa. Creado nuevo proceso con código {nuevo_codigo}")
+                                    else:
+                                        # Si no existe o existe en la misma empresa, intentamos obtenerlo primero
+                                        proceso_actual = Proceso.objects.filter(
+                                            codigo_proceso=codigo_proceso,
+                                            empresa=empresa
+                                        ).first()
 
-                                else:
-                                    self.stdout.write(self.style.WARNING(f'Proceso {codigo_proceso} actualizado.'))
+                                        if proceso_actual:
+                                            # Si existe, actualizamos
+                                            proceso_actual.sigla = sigla
+                                            proceso_actual.descripcion = descripcion.strip()
+                                            proceso_actual.carga = carga
+                                            proceso_actual.save()
+                                            proceso = proceso_actual
+                                            print(f"Proceso {codigo_proceso} actualizado.")
+                                        else:
+                                            # Si no existe, creamos uno nuevo
+                                            proceso = Proceso.objects.create(
+                                                codigo_proceso=codigo_proceso,
+                                                empresa=empresa,
+                                                sigla=sigla,
+                                                descripcion=descripcion.strip(),
+                                                carga=carga
+                                            )
+                                            print(f"Proceso {codigo_proceso} creado.")
 
+                                except Exception as e:
+                                    print(f"Error en la fila {[codigo_proceso, sigla, descripcion, carga]}: {str(e)}")
                             except Exception as e:
                                 self.stdout.write(self.style.ERROR(f'Error en la fila {row}: {str(e)}'))
                     break

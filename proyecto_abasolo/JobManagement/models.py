@@ -10,7 +10,7 @@ import uuid
 
 
 class Maquina(models.Model):
-    codigo_maquina = models.CharField(max_length=10, null=False, blank=False)
+    codigo_maquina = models.CharField(max_length=10, null=False, blank=False, unique=False)
     descripcion = models.CharField(max_length=100, null=False, blank=False)
     sigla = models.CharField(max_length=10, null=False, blank=False, default='')
     carga = models.DecimalField(max_digits=15, decimal_places=2, default=0)
@@ -24,7 +24,7 @@ class Maquina(models.Model):
         return f'{self.codigo_maquina} - {self.descripcion}'
     
 class Proceso(models.Model):
-    codigo_proceso = models.CharField(max_length=10, null=False, blank=False)
+    codigo_proceso = models.CharField(max_length=10, null=False, blank=False, unique=False)
     sigla = models.CharField(max_length=10, null=True, blank=True)
     descripcion = models.CharField(max_length=100, null=False, blank=False)
     carga = models.DecimalField(max_digits=10, decimal_places=4, default=0.0000)

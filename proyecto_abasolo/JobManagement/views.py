@@ -476,8 +476,16 @@ class ProgramCreateView(APIView):
         for ot_id in data.get('ordenes', []):
             print(f"Verificando OT con ID: {ot_id}")  # Log
             try:
-                orden_trabajo = OrdenTrabajo.objects.get(id=ot_id)
-                print(f"OT encontrada: {orden_trabajo}")
+                orden_trabajo = OrdenTrabajo.objects.select_related(
+                    'ruta_ot',
+                    'situacion_ot'
+                ).prefetch_related(
+                    'ruta_ot__items',
+                    'ruta_ot__items__proceso',
+                    'ruta_ot__items__maquina'
+                ).get(id=ot_id)
+                print(f"OT encontrada: {orden_trabajo.id} - {orden_trabajo.codigo_ot}")  # Debug
+            
             except OrdenTrabajo.DoesNotExist:
                 print(f"OT con ID {ot_id} no encontrada")
                 raise NotFound(f"Orden de trabajo con ID {ot_id} no encontrada.")
@@ -1281,18 +1289,22 @@ class ProgramDetailView(APIView):
                 'orden_trabajo__ruta_ot__items__maquina'
             ).order_by('prioridad')
 
+            print("Ots encontradas: ",[{
+                'id': pot.orden_trabajo.id,
+                'codigo': pot.orden_trabajo.codigo_ot
+            }for pot in program_ots])
+
+
             ordenes_trabajo = []
             for prog_ot in program_ots:
                 try:
-                    ot = prog_ot.orden_trabajo
+                    ot = OrdenTrabajo.objects.get(id=prog_ot.orden_trabajo.id)
                     ruta = getattr(ot, 'ruta_ot', None)
-
                     if not ruta:
                         continue
-
                     # Obtener items de ruta ordenados
                     ruta_items = ruta.items.all().order_by('item')
-                    
+
                     # Procesar cada proceso de la ruta
                     procesos = []
                     for item_ruta in ruta_items:
@@ -1309,7 +1321,8 @@ class ProgramDetailView(APIView):
                             'cantidad': float(item_ruta.cantidad_pedido),
                             'estandar': float(item_ruta.estandar if item_ruta.estandar > 0 else 500)
                         })
-
+                        
+                    
                     if procesos:  # Solo agregar OT si tiene procesos válidos
                         ot_data = {
                             'orden_trabajo': ot.id,
@@ -1318,6 +1331,7 @@ class ProgramDetailView(APIView):
                             'orden_trabajo_fecha_termino': ot.fecha_termino.strftime('%Y-%m-%d') if ot.fecha_termino else None,
                             'procesos': procesos
                         }
+                        
                         ordenes_trabajo.append(ot_data)
 
                 except Exception as e:
@@ -1332,6 +1346,7 @@ class ProgramDetailView(APIView):
                 "ordenes_trabajo": ordenes_trabajo,
                 "routes_data": routes_data
             }
+
 
             return Response(response_data, status=status.HTTP_200_OK)
 
