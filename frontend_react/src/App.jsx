@@ -1,34 +1,114 @@
-import {BrowserRouter, Routes, Route, Navigate} from 'react-router-dom'
-import { ClientPage } from './pages/clients/ClientPage'
-import { ClientFormPage } from './pages/clients/ClientFormPage'
-import { HomePage } from './pages/HomePage'
-import { OrderPage } from './pages/orders/OrderPage'
-import { OrderFormPage } from './pages/orders/OrderFormPage'
-import { ProgramPage } from './pages/programs/ProgramPage'
-import { ProgramFormPage } from './pages/programs/ProgramFormPage'
-import { ProgramaCard } from './components/Programa/ProgramaCard'
-import { ProgramDetail } from './pages/programs/ProgramDetail'
-import { Toaster } from 'react-hot-toast'
+import {BrowserRouter, Routes, Route, Navigate} from 'react-router-dom';
+import { ClientPage } from './pages/clients/ClientPage';
+import { ClientFormPage } from './pages/clients/ClientFormPage';
+import { HomePage } from './pages/HomePage';
+import { OrderPage } from './pages/orders/OrderPage';
+import { OrderFormPage } from './pages/orders/OrderFormPage';
+import { ProgramPage } from './pages/programs/ProgramPage';
+import { ProgramFormPage } from './pages/programs/ProgramFormPage';
+import { ProgramDetail } from './pages/programs/ProgramDetail';
+import { Toaster } from 'react-hot-toast';
+import { ProtectedRoute } from './components/ProtectedRoute/ProtectedRoute';
+import { Login } from './components/Login/Login';
+import { ProfilePage } from './components/Login/ProfilePage';
+import { UserManagementPage  } from './components/Admin/UserManagementPage';
+import { UserFormPage } from './components/Admin/UserFormPage';
+import { OperatorManagementPage } from './components/Operator/OperatorManagementPage';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-       <Route path='/' element={<Navigate to="/home"/>}/>
-       <Route path='/home' element={<HomePage/>}/>
-       <Route path='/clients' element={<ClientPage/>}/>
-       <Route path='/clients-create' element={<ClientFormPage/>}/>
-       <Route path='/clients/:id' element={<ClientFormPage/>}/>
-       <Route path='/orders' element={<OrderPage/>}/>
-       <Route path='/orders-create' element={<OrderFormPage/>}/>
-       <Route path='/orders/:id' element={<OrderFormPage/>}/>
-       <Route path='/programs' element={<ProgramPage/>}/>
-       <Route path='/programs-create' element={<ProgramFormPage/>}/>
-       <Route path='/programs/:programId' element={<ProgramDetail/>}/>
+        {/* Rutas públicas */}
+        <Route path='login/' element={<Login/>} />
+
+        {/*Ruta por defecto -  redirige a login si no está autenticado */}      
+        <Route path='/' element={<Navigate to="/home"/>}/>
+
+        {/* Rutas protegidas */}
+        <Route path='/profile' element={
+          <ProtectedRoute>
+            <ProfilePage/>
+          </ProtectedRoute>
+        }/>
+        <Route path='/home' element={
+          <ProtectedRoute>
+            <HomePage/>
+          </ProtectedRoute>}
+        />
+        <Route path='/clients' element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <ClientPage/>
+          </ProtectedRoute>}
+        />
+        <Route path='clients-create' element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <ClientFormPage/>
+          </ProtectedRoute>
+        }
+        />
+        <Route path='/clients/:id' element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <ClientFormPage/>
+          </ProtectedRoute>
+        }/>
+        <Route path='/orders' element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <OrderPage/>
+          </ProtectedRoute>
+        }/>
+        <Route path='/orders-create' element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <OrderFormPage/>
+          </ProtectedRoute>
+        }
+        />
+        <Route path='/orders/:id' element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <OrderFormPage/>
+          </ProtectedRoute>
+        }/>
+        <Route path='/programs' element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <ProgramPage/>
+          </ProtectedRoute>
+        }/>
+        <Route path='/programs-create' element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <ProgramFormPage/>
+          </ProtectedRoute>
+        }/>
+        <Route path='/programs/:programId' element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <ProgramDetail/>
+          </ProtectedRoute>
+        }/>
+        <Route path="/operators" element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <OperatorManagementPage/>
+          </ProtectedRoute>
+        }/>
+        <Route path="/users/manage" element={
+          <ProtectedRoute allowedRoles={['ADMIN', ]}>
+            <UserManagementPage />
+          </ProtectedRoute>
+        }/>
+        <Route path="/users/create" element={
+          <ProtectedRoute allowedRoles={['ADMIN', ]}>
+            <UserFormPage />
+          </ProtectedRoute>
+        }/>
+        <Route path="/users/edit/:id" element={
+          <ProtectedRoute allowedRoles={['ADMIN', ]}>
+            <UserFormPage />
+          </ProtectedRoute>
+        }/>
       </Routes>
       <Toaster/>
     </BrowserRouter>
   )
 }
 
-export default App
+export default App;
+
+/*//<Route path="*" element={<Navigate to="/login"/>}/>*/

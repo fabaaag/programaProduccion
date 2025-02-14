@@ -59,10 +59,15 @@ class CustomUser(AbstractUser):
         super().save(*args, **kwargs)
 
         if creating:
-            if self.rol == 'ADMIN':
-                self.groups.add(Group.objects.get(name='Administradores'))
-            elif self.rol == 'SUPERVISOR':
-                self.groups.add(Group.objects.get(name='Supervisores'))
-            elif self.rol== 'OPERADOR':
-                self.groups.add(Group.objects.get(name='Operadores'))
+            try: 
+                if self.rol == 'ADMIN':
+                    group = Group.objects.get_or_create(name='Administradores')[0]
+                elif self.rol == 'SUPERVISOR':
+                    group = Group.objects.get_or_create(name='Supervisores')[0]
+                elif self.rol== 'OPERADOR':
+                    group = Group.objects.get_or_create(name='Operadores')[0]
 
+                self.groups.add(group)
+
+            except Exception as e:
+                print(f"Error al asignar grupo: {e}")

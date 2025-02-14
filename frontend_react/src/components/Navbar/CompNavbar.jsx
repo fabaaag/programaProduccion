@@ -3,9 +3,18 @@ import './Navbar.css'
 import logavsa from './img/logavsa.png'
 import { Nav, Navbar, NavDropdown, Container } from 'react-bootstrap';
 import React from 'react';
+import { logout } from '../../api/auth.api';
+import { toast } from 'react-hot-toast';
 
 const CompNavbar = () => {
     const navigate = useNavigate();
+    const user = JSON.parse(localStorage.getItem('user'));
+
+    const handleLogout = () => {
+        logout();
+        toast.success('Sesion cerrada correctamente');
+        navigate('/login');
+    };
 
     return (
         <Navbar variant='dark' bg='dark' expand='lg'>
@@ -38,7 +47,7 @@ const CompNavbar = () => {
                             <NavDropdown.Divider />
                             <NavDropdown.Item href="/programs">Programas de Producción</NavDropdown.Item>
                             <NavDropdown.Divider />
-                            <NavDropdown.Item href="">Gestión de Operarios</NavDropdown.Item>
+                            <NavDropdown.Item href="/operators">Gestión de Operarios</NavDropdown.Item>
                         </NavDropdown>
 
                         <NavDropdown
@@ -49,6 +58,23 @@ const CompNavbar = () => {
                             <NavDropdown.Item href="">Listado de Máquinas</NavDropdown.Item>
                             <NavDropdown.Divider />
                             <NavDropdown.Item href="">Evento Mantención</NavDropdown.Item> 
+                        </NavDropdown>
+
+                        <NavDropdown
+                            title={user ? `${user.first_name || user.username} ` : 'Usuario'}
+                            id='user-dropdown'
+                            align='end'
+                            menuVariant='dark'
+                        >
+                            <NavDropdown.Item onClick={() => navigate('/profile')}>Mi Perfil</NavDropdown.Item>
+                            <NavDropdown.Divider />
+                            <NavDropdown.Item onClick={handleLogout}>Cerrar Sesión</NavDropdown.Item>
+                            <NavDropdown.Divider />
+                            {user?.rol === 'ADMIN' && (
+                                <NavDropdown.Item onClick={() => navigate('/users/manage')}>
+                                    Gestión de Usuarios
+                                </NavDropdown.Item>
+                            )}
                         </NavDropdown>
                     </Nav>
                 </Navbar.Collapse>

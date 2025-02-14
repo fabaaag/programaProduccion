@@ -6,7 +6,7 @@ from pytz import timezone
 from django.conf import settings
 
 # Create your models here.
-from JobManagement.models import EmpresaOT, Maquina, Proceso #ItemRuta, ProgramaProduccion
+from JobManagement.models import EmpresaOT, Maquina, Proceso, ItemRuta, ProgramaProduccion
 
 class RolOperador(models.Model):
     nombre = models.CharField(max_length=50, unique=True)
@@ -53,25 +53,33 @@ class AsignacionOperador(models.Model):
     def __str__(self):
         return f'{self.operador.nombre} asignado a {self.maquina.codigo_maquina} para {self.proceso.codigo_proceso} en {self.fecha_asignacion}'
     
-class DisponibilidadOperador(models.Model):
-    """
-    Representa los intervalos de tiempo durante los cuales un operador está disponible o asignado a una tarea.
-    
-    Atributos:
-        operador (ForeignKey): Referencia al operador cuya disponibilidad se está registrando.
-        fecha_inicio (DateTimeField): Fecha y hora en que comienza el periodo de disponibilidad o asignación.
-        fecha_fin (DateTimeField): Fecha y hora en que termina el periodo de disponibilidad o asignación.
-        ocupado (BooleanField): Indica si el operador está ocupado (True) o disponible (False) durante el intervalo especificado.
+    def verificar_conflictos(self):
+        """Verifica si hay conflictos con otras asignaciones del operador"""
+        conflictos = AsignacionOperador.objects.filter(
+            operador=self.operador,
+            fecha_asignacion=self.fecha_asignacion,
+        ).exclude(id=self.id)
 
-    Métodos:
-        __str__(self): Devuelve una representación en cadena que muestra el operador y el intervalo de tiempo durante el cual está ocupado o disponible.
-    """
-    from JobManagement.models import ProgramaProduccion
+        return conflictos.exists()
+    
+    def save(self, *args, **kwargs):
+        if self.verificar_conflictos():
+            raise ValueError("El operador ya tiene una asignación en este horario")
+        super().save(*args, **kwargs)
+    
+class DisponibilidadOperador(models.Model):
+    TURNO_CHOICES = [
+        ('MAÑANA', 'Turno Mañana'),
+        ('TARDE', 'Turno Tarde'),
+    ]
+
     operador = models.ForeignKey(Operador, on_delete=models.CASCADE)
     fecha_inicio = models.DateTimeField()
     fecha_fin = models.DateTimeField()
     ocupado = models.BooleanField(default=False)
     programa = models.ForeignKey(ProgramaProduccion, on_delete=models.CASCADE, related_name='disponibilidades_operadores', null=True)
+    turno = models.CharField(max_length=10, choices=TURNO_CHOICES, null=True)
+    proceso_asignado = models.ForeignKey('JobManagement.Proceso', on_delete=models.SET_NULL, null=True, blank=True)
 
 
     def __str__(self):
@@ -81,42 +89,78 @@ class DisponibilidadOperador(models.Model):
     class Meta:
         verbose_name = "Disponibilidad de Operador"
         verbose_name_plural = "Disponibilidades de Operadores"
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(fecha_fin__gt=models.F('fecha_inicio')),
+                name='fecha_fin_posterior_inicio'
+            )
+        ]
     
     @classmethod
     def crear_turnos_para_horizonte(cls, operador, dias_habiles=20):
-        fecha_inicio = datetime.now().date()
+        if fecha_inicio is None:
+            fecha_inicio = datetime.now().date()
+                
         chile_holidays = holidays.Chile()
         turnos = []
-
-
-        # Encuentra los días hábiles dentro del horizonte especificado
         dias_laborables = 0
-        while dias_laborables < dias_habiles:
-            if fecha_inicio.weekday() < 5 and fecha_inicio not in chile_holidays:
-                dias_laborables += 1
-                turnos += cls._crear_turnos_diarios(operador, fecha_inicio)
-            fecha_inicio += timedelta(days=1)
+        fecha_actual = fecha_inicio
 
-        # Crear todos los turnos en un solo comando
-        cls.objects.bulk_create(turnos)
+        while dias_laborables < dias_habiles:
+            if fecha_actual.weekday() < 5 and fecha_actual not in chile_holidays:
+                dias_laborables += 1
+                turnos.extend(cls._crear_turnos_diarios(operador, fecha_inicio))
+            fecha_actual += timedelta(days=1)
+
+        return cls.objects.bulk_create(turnos)
 
     @classmethod
     def _crear_turnos_diarios(cls, operador, dia, programa):
+        horarios = {
+            'MAÑANA': ('08:00', '13:00'),
+            'TARDE': ('14:00', '18:00' if dia.weekday() < 4 else '17:00')
+        }
         turnos = []
-        if dia.weekday() < 4:  # De lunes a jueves
-            turnos.extend(cls._crear_turno_diario(operador, dia, "08:00", "13:00", "14:00", "18:00", programa))
-        else:  # Viernes
-            turnos.extend(cls._crear_turno_diario(operador, dia, "08:00", "13:00", "14:00", "17:00", programa))
+        chile_tz = timezone('')
+
+        for turno, (hora_inicio, hora_fin) in horarios.items():
+            inicio = chile_tz.localize(
+                datetime.combine(dia, datetime.strptime(hora_inicio, '%H:%M').time())
+            )
+            fin = chile_tz.localize(
+                datetime.combine(dia, datetime.strptime(hora_fin, '%H:%M').time())
+            )
+
+            turnos.append(cls(
+                operador=operador,
+                fecha_inicio=inicio,
+                fecha_fin=fin,
+                turno=turno
+            ))
+        
         return turnos
 
-    @staticmethod
-    def _crear_turno_diario(operador, dia, manana_inicio, manana_fin, tarde_inicio, tarde_fin, programa):
-        chile_timezone = timezone('America/Santiago')
-        manana_inicio = chile_timezone.localize(datetime.combine(dia, datetime.strptime(manana_inicio, '%H:%M').time()))
-        manana_fin = chile_timezone.localize(datetime.combine(dia, datetime.strptime(manana_fin, '%H:%M').time()))
-        tarde_inicio = chile_timezone.localize(datetime.combine(dia, datetime.strptime(tarde_inicio, '%H:%M').time()))
-        tarde_fin = chile_timezone.localize(datetime.combine(dia, datetime.strptime(tarde_fin, '%H:%M').time()))
-        return [
-            DisponibilidadOperador(operador=operador, fecha_inicio=manana_inicio, fecha_fin=manana_fin, programa=programa),
-            DisponibilidadOperador(operador=operador, fecha_inicio=tarde_inicio, fecha_fin=tarde_fin, programa=programa)
-        ]
+    def asignar_programa(self, programa, proceso):
+        """Asigna un programa y proceso a un turno disponible"""
+
+        if self.ocupado:
+            raise ValueError("Este turno ya está ocupado")
+        
+        #Verificar que el horario del proceso coincida con el turno
+        if not (self.fecha_inicio <= programa.fecha_inicio and programa.fecha_fin <= self.fecha_fin):
+            raise ValueError("El horario del programa no coincide con el turno")
+        
+        self.programa = programa
+        self.proceso_asignado = proceso
+        self.ocupado = True
+        self.save()
+
+    def verificar_disponibilidad(self, fecha_inicio, fecha_fin):
+        """Verifica si el operador está disponible en el rango de fechas dado"""
+        return (
+            not self.ocupado and
+            self.fecha_inicio <= fecha_inicio and
+            self.fecha_fini >= fecha_fin
+        )
+
+    

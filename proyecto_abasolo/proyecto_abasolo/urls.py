@@ -22,7 +22,7 @@ urlpatterns = [
     path('clientes/', include('Client.urls')),
     path('gestion/', include('JobManagement.urls')),
     path('maquinas/', include('Machine.urls')),
-    path('operadores/', include('Operator.urls')),
+    path('operator/', include('Operator.urls')),
     path('productos/', include('Product.urls')),
     path('users/', include('UserManagement.urls')),
     
