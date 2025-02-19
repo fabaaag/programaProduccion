@@ -79,6 +79,7 @@ export const getMaquinas = async (programId) => {
   }
   try{
     const response = await programsApi.get(`${programId}/maquinas/`);
+    console.log(response)
     return response.data;
   }catch(error){
     console.error("Error fetching maquinas:", error);

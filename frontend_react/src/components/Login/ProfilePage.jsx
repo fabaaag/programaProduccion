@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Form, Button, Card, Container } from 'react-bootstrap';
 import CompNavbar from '../Navbar/CompNavbar.jsx';
-import { updateProfile, getProfile } from '../../api/auth.api';
+import { updateProfile, getProfile, refreshAccessToken } from '../../api/auth.api';
 import { toast } from 'react-hot-toast';
 
 export function ProfilePage(){
@@ -18,6 +18,12 @@ export function ProfilePage(){
     useEffect(() => {
         const fetchProfile = async () => {
             try {
+                // Verificar si hay token antes de hacer la petición
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    throw new Error('No hay token de autenticación');
+                }
+
                 const profileData = await getProfile();
                 setUserData({
                     first_name: profileData.first_name || '',
@@ -28,7 +34,26 @@ export function ProfilePage(){
                 });
             } catch (error) {
                 console.error('Error al cargar el perfil:', error);
-                toast.error('Error al cargar el perfil');
+                if (error.response?.status === 401) {
+                    // Si el error es de autenticación, intentar refresh
+                    try {
+                        await refreshAccessToken();
+                        // Reintentar la petición después del refresh
+                        const profileData = await getProfile();
+                        setUserData({
+                            first_name: profileData.first_name || '',
+                            last_name: profileData.last_name || '',
+                            email: profileData.email || '',
+                            telefono: profileData.telefono || '',
+                            cargo: profileData.cargo || ''
+                        });
+                    } catch (refreshError) {
+                        toast.error('Sesión expirada. Por favor, inicie sesión nuevamente.');
+                        window.location.href = '/login';
+                    }
+                } else {
+                    toast.error('Error al cargar el perfil');
+                }
             } finally {
                 setLoading(false);
             }

@@ -1,13 +1,24 @@
-import axios from 'axios';
+import axios from './axiosConfig';
 
-const API_URL = 'http://localhost:8000/users/api/v1/';
+const API_URL = 'http://localhost:8000/users/api/v1';
 
 export const loginUser = async (credentials) => {
     try {
-        const response = await axios.post(`${API_URL}login/`, credentials);
+        const response = await axios.post(`${API_URL}/login/`, credentials);
+        
+        // Guardar tokens inmediatamente después de recibirlos
+        if (response.data.token) {
+            localStorage.setItem('token', response.data.token);
+            localStorage.setItem('refreshToken', response.data.refresh);
+            
+            // Configurar el token en axios para futuras peticiones
+            axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+        }
+        
         return response.data;
-    }catch(error){
-        throw error.response.data;
+    } catch (error) {
+        console.error('Error en login:', error);
+        throw error;
     }
 };
 
@@ -24,18 +35,55 @@ export const logout = () => {
 
 export const updateProfile = async (userData) => {
     try{
-        const response = await axios.put(`${API_URL}profile/`, userData);
+        const token = localStorage.getItem('token');
+        const config = {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        };
+        const response = await axios.put(`${API_URL}/profile/`, userData);
         return response.data;
     }catch(error){
+        console.error('Error en updateProfile:', error);
         throw error;
     }
 };
 
 export const getProfile = async () => {
-    try{
-        const response = await axios.get(`${API_URL}profile/`);
-        return response.data
-    }catch(error){
+    try {
+        // Intentar obtener un nuevo token antes de la petición
+        await refreshAccessToken();
+        
+        const response = await axios.get(`${API_URL}/profile/`);
+        return response.data;
+    } catch (error) {
+        console.error('Error en getProfile:', error);
         throw error;
     }
-}
+};
+
+// Nueva función para refrescar el token
+export const refreshAccessToken = async () => {
+    try {
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (!refreshToken) {
+            throw new Error('No refresh token available');
+        }
+
+        const response = await axios.post(`${API_URL}/token/refresh/`, {
+            refresh: refreshToken
+        });
+
+        const newToken = response.data.access;
+        localStorage.setItem('token', newToken);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+
+        return newToken;
+    } catch (error) {
+        console.error('Error refreshing token:', error);
+        localStorage.clear();
+        window.location.href = '/login';
+        throw error;
+    }
+};

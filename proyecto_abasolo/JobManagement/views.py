@@ -4,7 +4,7 @@ from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from rest_framework import generics
 from rest_framework.response import Response
 
-from .serializers import OrdenTrabajoSerializer, ProgramaProduccionSerializer
+from .serializers import OrdenTrabajoSerializer, ProgramaProduccionSerializer, EmpresaOTSerializer
 from .models import OrdenTrabajo, RutaOT, TipoOT, SituacionOT, EmpresaOT, Proceso, Maquina, ItemRuta, ProgramaOrdenTrabajo, ProgramaProduccion, ItemRutaOperador
 from Product.models import MeasurementUnit, MateriaPrima
 from Client.models import Cliente
@@ -1268,6 +1268,7 @@ from collections import defaultdict
 from JobManagement.models import ProgramaProduccion, RutaOT
 from JobManagement.serializers import ProgramaProduccionSerializer
 from django.views.decorators.csrf import csrf_exempt
+from Operator.models import AsignacionOperador
 
 class ProgramDetailView(APIView):
     def get(self, request, pk):
@@ -1364,6 +1365,47 @@ class ProgramDetailView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    def post(self, request, pk):
+        try:
+            programa = ProgramaProduccion.objects.get(id=pk)
+            data = request.data
+            print("Datos recibidos en el backend:", data)  # Debug log
+
+            # Verificar que los objetos relacionados existen
+            try:
+                operador = Operador.objects.get(id=data['operador_id'])
+                print(operador)
+                maquina = Maquina.objects.get(id=data['maquina_id'])
+                print(maquina)
+                proceso = Proceso.objects.get(codigo_proceso=data['codigo_proceso'])
+                print(proceso)
+            except (Operador.DoesNotExist, Maquina.DoesNotExist, Proceso.DoesNotExist) as e:
+                print(f"Error al buscar objetos relacionados: {str(e)}")  # Debug log
+                return Response(
+                    {'error': f'No se encontró el objeto relacionado: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Crear la asignación
+            asignacion = AsignacionOperador.objects.create(
+                operador=operador,
+                maquina=maquina,
+                proceso=proceso,
+                programa=programa,
+                fecha_asignacion=data['fecha_asignacion']
+            )
+
+            return Response({
+                'message': 'Asignación creada exitosamente',
+                'id': asignacion.id
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            print(f"Error al crear asignación: {str(e)}")  # Debug log
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     def generate_timeline_data(self, programa, program_ots):
         groups = []
@@ -1434,7 +1476,31 @@ class ProgramDetailView(APIView):
                             "unidades_restantes": float(interval['unidades_restantes']),
                             "estandar": estandar
                         })
+                        #Bloque para asignaciones de operadores
+                        try:
+                            asignacion = AsignacionOperador.objects.filter(
+                                programa=programa,
+                                proceso=proceso,
+                                maquina=maquina,
+                                fecha_asignacion=interval['fecha_inicio'],
+                                
+                            ).first()
 
+                            #Agregar informacion de asignacion al item
+                            items[-1].update({
+                                "asignacion_id": asignacion.id if asignacion else None,
+                                "operador_id": asignacion.operador.id if asignacion else None,
+                                "operador_nombre": asignacion.operador.nombre if asignacion else None,
+                                "asignado": True if asignacion else False
+                            })
+                        except Exception as e:
+                            print(f"Error al obtener asignacion: {str(e)}")
+                            items[-1].update({
+                                "asignacion_id": None,
+                                "operador_id": None,
+                                "operador_nombre": None,
+                                "asignado": False
+                            })
                     # Actualizar fecha de inicio para el siguiente proceso
                     if dates_data['intervals']:
                         next_available_start = dates_data['next_available_time']
@@ -1793,6 +1859,21 @@ class GenerateProgramPDF(APIView):
                 {"error": "Error generando PDF"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class MaquinaListView(APIView):
+    def get(self, request):
+        """Obtener lista de todas las máquinas"""
+        maquinas = Maquina.objects.all()
+        serializer = MaquinaSerializer(maquinas, many=True)
+        return Response(serializer.data)
+
+
+class EmpresaListView(APIView):
+    def get(self, request):
+        empresas = EmpresaOT.objects.all()
+        serializer = EmpresaOTSerializer(empresas, many=True)
+        return Response(serializer.data)
 
 """
 def calculate_working_days(start_date, cantidad, estandar):

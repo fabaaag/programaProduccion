@@ -26,16 +26,17 @@ export function Login(){
 
             //Guardar token y datos de usuario
             localStorage.setItem('token', data.token);
-            localStorage.setItem('refresh', data.refresh)
+            localStorage.setItem('refreshToken', data.refresh);
             localStorage.setItem('user', JSON.stringify(data.user));
 
+            console.log('Token guardado:', localStorage.getItem('token'));
+            console.log('Refresh token guardado:', localStorage.getItem('refreshToken'));
+            console.log('Usuario guardado:', localStorage.getItem('user'));
+
             toast.success('Inicio de sesión exitoso');
-            
-            
+                        
             //Redirigir segun el rol del usuario
-            if(data.user.rol === 'ADMIN'){
-                navigate('/home');
-            }else if(data.user.rol === 'SUPERVISOR'){
+            if(data.user.rol === 'ADMIN' || data.user.rol === 'SUPERVISOR'){
                 navigate('/home');
             }else {
                 navigate('/home');

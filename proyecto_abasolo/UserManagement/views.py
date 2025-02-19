@@ -3,7 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import UserSerializer, UserCreateSerializer
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from .serializers import UserSerializer, UserCreateSerializer, UserProfileSerializer
 from .models import CustomUser
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import authenticate
@@ -124,14 +125,18 @@ class LoginView(APIView):
     
 #Vista de perfil
 class ProfileView(APIView):
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    serializer_class  = UserProfileSerializer
 
     def get(self, request):
-        serializer = UserSerializer(request.user)
+        print("Headers recibidos:", request.headers)
+        print("Usuario autenticado:", request.user)
+        serializer = self.serializer_class(request.user)
         return Response(serializer.data)
     
     def put(self, request):
-        serializer = UserSerializer(request.user, data=request.data, partida=True)
+        serializer = self.serializer_class(request.user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)

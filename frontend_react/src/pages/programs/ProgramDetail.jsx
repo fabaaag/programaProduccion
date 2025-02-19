@@ -5,6 +5,8 @@ import { ReactSortable } from "react-sortablejs";
 import CompNavbar from "../../components/Navbar/CompNavbar";
 import { Footer } from "../../components/Footer/Footer";
 import { getProgram, updatePriorities, deleteOrder, getMaquinas, generateProgramPDF } from "../../api/programs.api";
+import { getAllOperators } from "../../api/operator.api";
+import { crearAsignacion, obtenerAsignacionesPrograma } from "../../api/asignaciones.api";
 import Timeline from "react-calendar-timeline";
 import "react-calendar-timeline/dist/Timeline.scss";
 import { toast } from "react-hot-toast";
@@ -25,6 +27,9 @@ export function ProgramDetail() {
 
     const [pendingChanges, setPendingChanges] = useState({});
     const [savingChanges, setSavingChanges] = useState(false);
+    const [operadores, setOperadores] = useState([]);
+
+    
 
     const handleProcessChange = (otId, procesoId, field, value) => {
         if(!otList){
@@ -90,21 +95,35 @@ export function ProgramDetail() {
     
         setSavingChanges(true);
         try {
+            // 1. Primero guardamos las asignaciones pendientes
+            const asignacionesPendientes = Object.entries(pendingChanges)
+                .filter(([key]) => key.includes('_asignacion'))
+                .map(([_, data]) => data);
+    
+            console.log("Asignaciones pendientes a guardar:", asignacionesPendientes);
+    
+            for (const asignacionData of asignacionesPendientes) {
+                await crearAsignacion(asignacionData);
+            }
+    
+            // 2. Luego actualizamos las prioridades de las OTs
             const updatedOrders = otList.map((ot, index) => ({
                 id: ot.orden_trabajo,
                 priority: index + 1,
                 procesos: ot.procesos?.map(proceso => ({
-                    id: proceso.id,
+                    id: proceso.codigo_proceso,
                     estandar: proceso.estandar || 0,
-                    maquina_id: proceso.maquina_id
+                    maquina_id: proceso.maquina_id,
+                    operador_id: proceso.operador_id  // Agregamos el operador_id
                 })) || []
             }));
     
-            console.log("Datos que se enviarán al backend:", updatedOrders);
+            console.log("Datos de OTs a actualizar:", updatedOrders);
             
             const response = await updatePriorities(programId, updatedOrders);
             console.log("Respuesta del servidor:", response);
     
+            // Actualizar el estado con la respuesta
             if (response.ordenes_trabajo) {
                 setOtList(response.ordenes_trabajo);
             }
@@ -155,22 +174,33 @@ export function ProgramDetail() {
         setShowTimeline(!showTimeline);
     };
 
+    useEffect(() => {
+        console.log("Estado actual de máquinas:", maquinas);
+    }, [maquinas]);
+
+
+
     useEffect(()=> {
-        const fetchMaquinas = async () => {
+        const fetchData = async () => {
             if(!programId){
                 console.error("No hay programId disponible");
                 return;
             }
             try{
-                const response = await getMaquinas(programId);
-                console.log("Maquinas cargadas:", response);
-                setMaquinas(response);
+                const maquinasData = await getMaquinas(programId);
+                console.log("Máquinas obtenidas:", maquinasData);
+                setMaquinas(maquinasData);
+
+                const operadoresData = await getAllOperators();
+                console.log("Operadores obtenidos:", operadoresData);
+                setOperadores(operadoresData);
+                
             }catch(error){
-                console.error("Error al cargar máquinas:", error);
-                toast.error("Error al cargar la lista de máquinas");
+                console.error("Error al cargar datos:", error);
+                toast.error("Error al cargar ldatos");
             }
         };
-        fetchMaquinas();
+        fetchData();
     }, [programId])
 
 
@@ -185,14 +215,10 @@ export function ProgramDetail() {
             setLoading(true);
             try {
                 const response = await getProgram(programId);
-                console.log("Respuesta completa: ", response);
-                console.log("Ordenes de trabajo: ", response.ordenes_trabajo);
-
+                
                 // Actualizar los datos generales del programa
                 setProgramData(response.program || {});
                 setOtList(response.ordenes_trabajo || []);
-
-                console.log("Estado otList: ", otList);
     
                 // Validar y procesar los datos de las rutas
                 if (response.routes_data && typeof response.routes_data === "object") {
@@ -262,6 +288,7 @@ export function ProgramDetail() {
                 }
             } catch (error) {
                 console.error("Error al cargar detalles del programa:", error);
+                toast.error("Error al cargar los datos");
             } finally {
                 setLoading(false);
             }
@@ -270,6 +297,11 @@ export function ProgramDetail() {
         fetchProgramData();
     }, [programId]);
     
+
+
+    
+
+
     const handleDeleteOrder = async (orderId) => {
         console.log(orderId, programId);
         if(window.confirm("¿Estás seguro que deseas eliminar esta orden de trabajo?")){
@@ -358,8 +390,68 @@ export function ProgramDetail() {
     };
 
     const renderOt = (ot) => {
-        const hasPendingChanges = Object.keys(pendingChanges).some(change => change.startsWith(`${ot.orden_trabajo}-`));
+        // Verificar cambios pendientes solo para esta OT específica
+        const hasPendingChanges = Object.keys(pendingChanges).some(key => {
+            if (key.includes('_asignacion')) {
+                // Verificar si algún proceso de esta OT tiene cambios pendientes
+                return ot.procesos.some(proceso => 
+                    key === `${proceso.id}_asignacion`  // Cambiado de codigo_proceso a id
+                );
+            }
+            return false;
+        }); 
+
         if (!ot) return null;
+
+        const handleOperadorChange = (proceso, operadorId) => {
+            try {
+                const timelineItem = timelineItems.find(item => {
+                    if (!item || !item.id) return false;
+                    const itemIdParts = item.id.split('_');
+                    return parseInt(itemIdParts[1]) === proceso.id;
+                });
+
+                if(!timelineItem){
+                    console.error('No se encontró el item del timeline correspondiente');
+                    toast.error('Error: No se encontró la programación del proceso');
+                    return;
+                }
+
+                // Actualizar el estado de otList para mantener el operador seleccionado
+                setOtList(prevOtList => 
+                    prevOtList.map(ot => ({
+                        ...ot,
+                        procesos: ot.procesos.map(p => 
+                            p.id === proceso.id 
+                                ? { ...p, operador_id: operadorId }
+                                : p
+                        )
+                    }))
+                );
+                
+                const asignacionData = {
+                    operador_id: operadorId,
+                    maquina_id: proceso.maquina_id,
+                    proceso_id: proceso.id,
+                    codigo_proceso: proceso.codigo_proceso,
+                    programa_id: programId,
+                    fecha_asignacion: new Date(timelineItem.start_time).toISOString().split('T')[0]
+                };
+                
+                console.log('Datos de asignación a guardar:', asignacionData);
+
+                setPendingChanges(prev => ({
+                    ...prev,
+                    [`${proceso.id}_asignacion`]: asignacionData
+                }));
+
+            } catch (error){
+                console.error('Error al preparar asignación:', error);
+                toast.error('Error al preparar la asignación');
+            }
+        };
+        
+
         return (
             <div
                 key={ot.orden_trabajo}
@@ -379,7 +471,7 @@ export function ProgramDetail() {
                         <span>{ot.orden_trabajo_descripcion_producto_ot || "Sin descripción"}</span>
                         <span className="ms-3">{ot.orden_trabajo_fecha_termino || "Sin fecha"}</span>
                     </div>
-                    <div className="d-flex aling-items-center">
+                    <div className="d-flex align-items-center">
                         {hasPendingChanges && (
                             <Button
                                 variant="success"
@@ -409,6 +501,7 @@ export function ProgramDetail() {
                                 <th>#</th>
                                 <th>Proceso</th>
                                 <th>Máquina</th>
+                                <th>Operador</th>
                                 <th>Cantidad</th>
                                 <th>Estandar</th>
                             </tr>
@@ -439,18 +532,53 @@ export function ProgramDetail() {
                                         )}
                                         >
                                             <option value="">Seleccione una máquina</option>
-                                            {maquinas && maquinas.length > 0 ? (
-                                                maquinas.map(maquina => (
-                                                    <option 
-                                                        value={maquina.id} 
-                                                        key={maquina.id}
-                                                    >
-                                                        {maquina.codigo_maquina} - {maquina.descripcion}
-                                                    </option>
-                                                ))
+                                            {maquinas ? (
+                                                maquinas.map(maquina => {
+                                                    
+                                                    return(
+                                                        <option 
+                                                            value={maquina.id} 
+                                                            key={maquina.id}
+                                                        >
+                                                            {maquina.codigo_maquina} - {maquina.descripcion}
+                                                        </option>
+                                                    );
+                                                })
                                             ) : (
                                                 <option disabled>No hay máquinas disponibles</option>
                                             )};
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select
+                                            className='form-control'
+                                            value={proceso.operador_id || ''}
+                                            onChange={(e) => handleOperadorChange(
+                                                proceso,
+                                                e.target.value
+                                            )}
+                                            disabled={!proceso.maquina_id}
+                                        >
+                                            <option value="">Seleccione un operador</option>
+                                            {operadores && operadores.length > 0 ? (
+                                                operadores
+                                                    .filter(operador =>
+                                                        proceso.maquina_id && 
+                                                        operador.maquinas.some(m => 
+                                                            m.id === parseInt(proceso.maquina_id)
+                                                        )
+                                                    )
+                                                    .map(operador => (
+                                                        <option
+                                                            key={operador.id}
+                                                            value={operador.id}
+                                                        >
+                                                            {operador.nombre}
+                                                        </option>
+                                                    ))
+                                            ) : (
+                                                <option disabled>No hay operadores disponibles</option>
+                                            )}
                                         </select>
                                     </td>
                                     <td>

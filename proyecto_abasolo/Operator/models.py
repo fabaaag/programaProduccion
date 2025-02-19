@@ -4,8 +4,7 @@ from datetime import time, datetime, timedelta
 import holidays
 from pytz import timezone
 from django.conf import settings
-
-# Create your models here.
+from django.core.validators import RegexValidator
 from JobManagement.models import EmpresaOT, Maquina, Proceso, ItemRuta, ProgramaProduccion
 
 class RolOperador(models.Model):
@@ -16,6 +15,13 @@ class RolOperador(models.Model):
 
 class Operador(models.Model):
     nombre = models.CharField(max_length=100)
+    rut = models.CharField(
+        max_length=12,
+        unique=True,
+        null=True,
+        blank=True,
+        validators=[RegexValidator(regex=r'^\d{1,2}\.\d{3}\.\d{3}[-][0-9kK]{1}$')]
+    )
     rol = models.ForeignKey(RolOperador, on_delete=models.PROTECT)
     empresa = models.ForeignKey(EmpresaOT, on_delete=models.CASCADE)
     activo = models.BooleanField(default=True)
@@ -31,6 +37,11 @@ class Operador(models.Model):
     def __str__(self):
         return f'{self.nombre} - {self.rol.nombre}'
     
+    def get_asignaciones_programa(self, programa):
+        """Obtiene las asignaciones del operador de un programa específico"""
+        return self.asignaciones_set.filter(
+            programa=programa
+        ).select_related('maquina', 'proceso')
     
 class OperadorMaquina(models.Model):
     operador = models.ForeignKey(Operador, on_delete=models.CASCADE)

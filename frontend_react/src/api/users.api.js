@@ -1,12 +1,17 @@
-import axios from 'axios';
+import axios from './axiosConfig';
 
 const API_URL = 'http://localhost:8000/users/api/v1';
 
 export const getAllUsers = async () => {
     try {
         const response = await axios.get(`${API_URL}/users/`);
+        console.log('Headers de la petición:', response.config.headers);
         return response.data;
     } catch (error) {
+        if(error.response?.status === 401){
+            console.log('Token actual:', localStorage.getItem('token'));
+            console.log('Headers enviados:', error.config.headers);
+        }
         throw error;
     }
 };
@@ -48,7 +53,7 @@ export const toggleUserStatus = async(userId) => {
 
 export const getUserById = async (id) => {
     try{
-        const response = await axios.get(`${API_URL}/users/${id}`);
+        const response = await axios.get(`${API_URL}/users/${id}/`);
         return response.data;
     } catch (error) {
         throw error;

@@ -28,4 +28,7 @@ urlpatterns += [
 #Urls para maquinas dentro del programa
 urlpatterns += [
     path('api/v1/programas/<int:pk>/maquinas/', views.MaquinasView.as_view(), name='maquinas-list'),
+    path('api/v1/maquinas/', views.MaquinaListView.as_view(), name='maquinas-get-list'),
+    path('api/v1/empresas/', views.EmpresaListView.as_view(), name='empresas-get-list'),
+    path('api/v1/programas/<int:pk>/asignaciones/', views.ProgramDetailView.as_view(), name='asignaciones-programa')
 ]

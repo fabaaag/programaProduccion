@@ -14,6 +14,7 @@ import { ProfilePage } from './components/Login/ProfilePage';
 import { UserManagementPage  } from './components/Admin/UserManagementPage';
 import { UserFormPage } from './components/Admin/UserFormPage';
 import { OperatorManagementPage } from './components/Operator/OperatorManagementPage';
+import { ProgramaOperadores } from './components/Operator/ProgramaOperadores'
 
 function App() {
   return (
@@ -81,6 +82,11 @@ function App() {
         <Route path='/programs/:programId' element={
           <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
             <ProgramDetail/>
+          </ProtectedRoute>
+        }/>
+        <Route path='/programs/:programId/operadores' element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <ProgramaOperadores/>
           </ProtectedRoute>
         }/>
         <Route path="/operators" element={
