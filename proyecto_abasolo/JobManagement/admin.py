@@ -3,9 +3,9 @@ from django.contrib import admin
 from django.utils import timezone
 from django import forms
 
-from .models import Maquina, Proceso, Ruta, RutaPieza, TipoOT, SituacionOT, OrdenTrabajo, EmpresaOT, RutaOT, ItemRuta, ItemRutaOperador, ProgramaOrdenTrabajo, ProgramaProduccion, AtrasoDiarioOT, DisponibilidadMaquina, Asignacion
+from .models import Maquina, Proceso, Ruta, RutaPieza, TipoOT, SituacionOT, OrdenTrabajo, EmpresaOT, RutaOT, ItemRuta, ProgramaOrdenTrabajo, ProgramaProduccion
 
-from .forms import ProgramaOrdenTrabajoAdminForm, AsignacionAdminForm
+from .forms import ProgramaOrdenTrabajoAdminForm
 # Register your models here.
 
 class MaquinaAdmin(admin.ModelAdmin):
@@ -50,10 +50,6 @@ class ItemRutaInline(admin.TabularInline):
     fields = ('item', 'maquina', 'proceso', 'estandar', 'cantidad_pedido', 'cantidad_terminado_proceso', 'cantidad_perdida_proceso', 'terminado_sin_actualizar')
     extra = 1
 
-class ItemRutaOperadorInline(admin.TabularInline):
-    model = ItemRutaOperador
-    extra = 1
-
 class OrdenTrabajoCodigoOTFilter(admin.SimpleListFilter):
     title = 'by codigo_ot'
     parameter_name = 'by codigo_ot'
@@ -72,7 +68,6 @@ class ItemRutaAdmin(admin.ModelAdmin):
     list_filter = (OrdenTrabajoCodigoOTFilter, )
     search_fields = ['ruta__orden_trabajo__codigo_ot']
 
-    inlines = [ItemRutaOperadorInline]
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -119,66 +114,22 @@ class ProgramaOrdenTrabajoInline(admin.TabularInline):
 
 class ProgramaProduccionAdmin(admin.ModelAdmin):
     list_display = ['id', 'nombre', 'fecha_inicio', 'fecha_fin']
-    inlines = [ProgramaOrdenTrabajoInline, ItemRutaOperadorInline]
+    inlines = [ProgramaOrdenTrabajoInline]
 
     def save_model(self, request, obj, form, change):
         if not obj.nombre:
             obj.nombre = f"Programa_{timezone.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
         super().save_model(request, obj, form, change)
 
-class OrdenTrabajoAdmin(admin.ModelAdmin):
-    list_display = ('codigo_ot', 'empresa', 'tipo_ot', 'situacion_ot', 'fecha_termino')
-    search_fields = ('codigo_ot', 'descripcion_producto_ot')
-    list_filter = ('tipo_ot', 'situacion_ot')
-    date_hierarchy = 'fecha_termino'
-    ordering = ('-fecha_termino',)
 
 @admin.register(EmpresaOT)
 class EmpresaOTAdmin(admin.ModelAdmin):
     list_display = ('nombre', 'apodo', 'codigo_empresa')
     search_fields = ('nombre', 'nombre_fantasia', 'codigo_empresa')
 
-@admin.register(ItemRutaOperador)
-class ItemRutaOperadorAdmin(admin.ModelAdmin):
-    list_display = ('item_ruta', 'operador', 'programa_produccion', 'created_at', 'modified_at')
-    search_fields = ('operador__nombre', 'item_ruta__id', 'programa_produccion__nombre')
-    list_filter = ('operador', 'programa_produccion')
-
-@admin.register(AtrasoDiarioOT)
-class AtrasoDiariaOTAdmin(admin.ModelAdmin):
-    list_display = ('fecha', 'dias_acumulados_atraso')
-    search_fields = ('fecha', 'dias_acumulados_atraso')
-
-
-class DisponibilidadMaquinaAdmin(admin.ModelAdmin):
-    list_display = ('maquina', 'fecha_inicio', 'fecha_fin', 'ocupado', 'programa')
-    list_filter = ('ocupado', 'maquina')
-    search_fields = ('maquina__codigo_maquina',)
-
-class AsignacionAdmin(admin.ModelAdmin):
-    form = AsignacionAdminForm
-    # Update list_display to pull dates from the DisponibilidadMaquina
-    list_display = ('maquina', 'orden_trabajo', 'get_fecha_inicio', 'get_fecha_fin', 'ocupado', 'programa')
-    list_filter = ('ocupado', 'maquina', 'programa')
-    search_fields = ('maquina__codigo_maquina', 'orden_trabajo__codigo_ot')
-    # Update date_hierarchy to use the related DisponibilidadMaquina date
-    date_hierarchy = 'disponibilidad_maquina__fecha_inicio'
-    ordering = ('disponibilidad_maquina__fecha_inicio',)
-
-    def get_fecha_inicio(self, obj):
-        return obj.disponibilidad_maquina.fecha_inicio
-    get_fecha_inicio.short_description = 'Fecha de Inicio'
-    get_fecha_inicio.admin_order_field = 'disponibilidad_maquina__fecha_inicio'
-
-    def get_fecha_fin(self, obj):
-        return obj.disponibilidad_maquina.fecha_fin
-    get_fecha_fin.short_description = 'Fecha de Fin'
-    get_fecha_fin.admin_order_field = 'disponibilidad_maquina__fecha_fin'
 
 admin.site.register(Maquina, MaquinaAdmin)
 admin.site.register(RutaOT, RutaOTAdmin)
 admin.site.register(ItemRuta)
 admin.site.register(ProgramaProduccion, ProgramaProduccionAdmin)
 admin.site.register(OrdenTrabajo, OrdenTrabajoAdmin)
-admin.site.register(DisponibilidadMaquina, DisponibilidadMaquinaAdmin)
-admin.site.register(Asignacion, AsignacionAdmin)

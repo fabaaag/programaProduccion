@@ -17,7 +17,7 @@ export function OperatorMachinesModal({ show, handleClose, operator }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {operator?.maquinas?.map(maquina => (
+                        {operator?.maquinas_habilitadas?.map(maquina => (
                             <tr key={maquina.id}>
                                 <td>{maquina.codigo_maquina}</td>
                                 <td>{maquina.descripcion}</td>
@@ -31,7 +31,7 @@ export function OperatorMachinesModal({ show, handleClose, operator }) {
                         ))}
                     </tbody>
                 </Table>
-                {operator?.maquinas?.length === 0 && (
+                {operator?.maquinas_habilitadas?.length === 0 && (
                     <div className="text-center py-3">
                         <p>Este operador no tiene máquinas asignadas</p>
                     </div>

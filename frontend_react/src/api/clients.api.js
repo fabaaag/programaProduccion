@@ -1,11 +1,11 @@
-import axios from 'axios'
+import axios from './axiosConfig'
 
 const clientsApi = axios.create({
-    baseURL:'http://localhost:8000/clientes/api/v1/clientes/'
+    baseURL:'http://localhost:8000'
 });
 
-export const getAllClients = () => clientsApi.get('/');
-export const createClient = (client) => clientsApi.post('/', client);
-export const deleteClient = (id) => clientsApi.delete(`/${id}/`);
-export const updateClient = (id, client) => clientsApi.put(`/${id}/`, client);
-export const getClient = (id) => clientsApi.get(`/${id}/`);
+export const getAllClients = async () => await axios.get('/clientes/api/v1/clientes/');
+export const createClient = async (client) => await axios.post('/clientes/api/v1/clientes/', client);
+export const deleteClient = async (id) => await axios.delete(`/clientes/api/v1/clientes/${id}/`);
+export const updateClient = async (id, client) => await axios.put(`/clientes/api/v1/clientes/${id}/`, client);
+export const getClient = async (id) => await axios.get(`/clientes/api/v1/clientes/${id}/`);

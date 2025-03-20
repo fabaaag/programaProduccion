@@ -14,7 +14,7 @@ export function HomePage() {
         <div className="container-fluid border-bottom-1">
           <div className="col md-12 d-flex justify-content-evenly">
             <Card style={{width:"18rem"}}>
-              <Card.Img variant='top' src='' />
+              <Card.Img variant='top' src='#' />
               <Card.Body>
                 <Card.Title>Planificación</Card.Title>
                 <Card.Text>Redirige a la página de programas de producción</Card.Text>
@@ -26,13 +26,13 @@ export function HomePage() {
               </Card.Body>
             </Card>
             <Card style={{width:"18rem"}}>
-              <Card.Img variant='top' src='' />
+              <Card.Img variant='top' src='#' />
               <Card.Body>
-                <Card.Title>M. Materiales</Card.Title>
-                <Card.Text>Redirige a la página de programas de producción</Card.Text>
+                <Card.Title>M. Materiales/Diagnosticomaqs</Card.Title>
+                <Card.Text>Redirige a la página de diagns</Card.Text>
                 <div className="container d-flex justify-content-center">
                   <Button variant='primary' onClick={()=>{
-                      navigate('/programs')
+                      navigate('/machines-diagnostico')
                     }}>Ir</Button>
                 </div>
               </Card.Body>
@@ -41,19 +41,19 @@ export function HomePage() {
           <br />
           <div className="col md-12 d-flex justify-content-evenly">
             <Card style={{width:"18rem"}}>
-              <Card.Img variant='top' src='' />
+              <Card.Img variant='top' src='#' />
               <Card.Body>
                 <Card.Title>Gestión</Card.Title>
-                <Card.Text>Redirige a la página de programas de producción</Card.Text>
+                <Card.Text>Redirige a la página de gestion de personal</Card.Text>
                 <div className="container d-flex justify-content-center">
                   <Button variant='primary' onClick={()=>{
-                    navigate('/programs')
+                    navigate('/operators')
                   }}>Ir</Button>
                 </div>
               </Card.Body>
             </Card>
             <Card style={{width:"18rem"}}>
-              <Card.Img variant='top' src='' />
+              <Card.Img variant='top' src='#' />
               <Card.Body>
                 <Card.Title>Máquinas</Card.Title>
                 <Card.Text>Redirige a la página de programas de producción</Card.Text>

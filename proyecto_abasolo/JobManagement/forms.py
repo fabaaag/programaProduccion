@@ -2,7 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 
 from .models import OrdenTrabajo, RutaOT
-from .models import ProgramaOrdenTrabajo, OrdenTrabajo, SituacionOT, Asignacion
+from .models import ProgramaOrdenTrabajo, OrdenTrabajo, SituacionOT
 
 class OrdenTrabajoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
@@ -23,8 +23,6 @@ class OrdenTrabajoForm(forms.ModelForm):
             instance.save()
         return instance
 
-
-
 class ProgramaOrdenTrabajoAdminForm(forms.ModelForm):
     class Meta:
         model = ProgramaOrdenTrabajo
@@ -35,16 +33,3 @@ class ProgramaOrdenTrabajoAdminForm(forms.ModelForm):
         # Filter the orden_trabajo queryset
         situacion_ot_ids = SituacionOT.objects.filter(codigo_situacion_ot__in=['P', 'S']).values_list('id', flat=True)
         self.fields['orden_trabajo'].queryset = OrdenTrabajo.objects.filter(situacion_ot_id__in=situacion_ot_ids)
-
-
-
-class AsignacionAdminForm(forms.ModelForm):
-    class Meta:
-        model = Asignacion
-        fields = '__all__'
-
-    def __init__(self, *args, **kwargs):
-        super(AsignacionAdminForm, self).__init__(*args, **kwargs)
-        situacion_ot_ids = SituacionOT.objects.filter(codigo_situacion_ot__in=['P', 'S']).values_list('id', flat=True)
-        self.fields['orden_trabajo'].queryset = OrdenTrabajo.objects.filter(situacion_ot_id__in=situacion_ot_ids)
-

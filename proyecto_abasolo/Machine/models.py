@@ -5,11 +5,21 @@ from django.conf import settings
 
 # Create your models here.
 class TipoMaquina(models.Model):
-    codigo = models.CharField(max_length=10, unique=True)
-    descripcion = models.CharField(max_length=100)
+    codigo = models.CharField(max_length=10, unique=True)  # Sigla del proceso (ej: 'COR')
+    descripcion = models.CharField(max_length=100)  # Ej: "Máquinas para Corte"
+
+    class Meta:
+        verbose_name = "Tipo de Máquina"
+        verbose_name_plural = "Tipos de Máquina"
 
     def __str__(self):
         return f"{self.codigo} - {self.descripcion}"
+
+    def save(self, *args, **kwargs):
+        # Auto-generar la descripción si no se proporciona
+        if not self.descripcion:
+            self.descripcion = f"Máquinas para {self.codigo.title()}"
+        super().save(*args, **kwargs)
 
 class EstadoOperatividad(models.Model):
     ESTADO_CHOICES = [
@@ -26,9 +36,9 @@ class EstadoOperatividad(models.Model):
     
 class EstadoMaquina(models.Model):
     maquina = models.OneToOneField(Maquina, on_delete=models.CASCADE, related_name='estado')
-    tipo_maquina = models.ForeignKey(TipoMaquina, on_delete=models.PROTECT)
+    tipos_maquina = models.ManyToManyField(TipoMaquina, related_name='maquinas')
     estado_operatividad = models.ForeignKey(EstadoOperatividad, on_delete=models.PROTECT)
-    motiov_estado = models.TextField(blank=True, null=True)
+    motivo_estado = models.TextField(blank=True, null=True)
     fecha_ultimo_cambio = models.DateTimeField(auto_now=True)
     disponible = models.BooleanField(default=True)
     capacidad_maxima = models.IntegerField(default=0)

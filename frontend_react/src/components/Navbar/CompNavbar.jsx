@@ -55,7 +55,7 @@ const CompNavbar = () => {
                             title="Gestión de Máquinas"
                             menuVariant='dark'
                         >
-                            <NavDropdown.Item href="">Listado de Máquinas</NavDropdown.Item>
+                            <NavDropdown.Item href="/machines">Listado de Máquinas</NavDropdown.Item>
                             <NavDropdown.Divider />
                             <NavDropdown.Item href="">Evento Mantención</NavDropdown.Item> 
                         </NavDropdown>

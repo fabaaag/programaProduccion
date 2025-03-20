@@ -1,10 +1,9 @@
 import axios from './axiosConfig';
 
-const API_URL = 'http://localhost:8000/users/api/v1';
 
 export const loginUser = async (credentials) => {
     try {
-        const response = await axios.post(`${API_URL}/login/`, credentials);
+        const response = await axios.post(`/users/api/v1/login/`, credentials);
         
         // Guardar tokens inmediatamente después de recibirlos
         if (response.data.token) {
@@ -42,7 +41,7 @@ export const updateProfile = async (userData) => {
                 'Content-Type': 'application/json'
             }
         };
-        const response = await axios.put(`${API_URL}/profile/`, userData);
+        const response = await axios.put(`/users/api/v1/profile/`, userData);
         return response.data;
     }catch(error){
         console.error('Error en updateProfile:', error);
@@ -55,7 +54,7 @@ export const getProfile = async () => {
         // Intentar obtener un nuevo token antes de la petición
         await refreshAccessToken();
         
-        const response = await axios.get(`${API_URL}/profile/`);
+        const response = await axios.get(`/users/api/v1/profile/`);
         return response.data;
     } catch (error) {
         console.error('Error en getProfile:', error);
@@ -71,7 +70,7 @@ export const refreshAccessToken = async () => {
             throw new Error('No refresh token available');
         }
 
-        const response = await axios.post(`${API_URL}/token/refresh/`, {
+        const response = await axios.post(`/users/api/v1/token/refresh/`, {
             refresh: refreshToken
         });
 

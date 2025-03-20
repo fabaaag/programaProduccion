@@ -17,12 +17,13 @@ urlpatterns += [
     path('api/v1/ordenes/no_asignadas/', views.get_unassigned_ots, name='ordenes-unassigned'),
     path('api/v1/programas/', views.ProgramListView.as_view(), name='programas-list'),
     path('api/v1/programas/<int:pk>/', views.ProgramDetailView.as_view(), name='get-program'),
-    path('api/v1/programas/<int:id>/gantt/', views.ProgramDetailView.transform_to_timeline_format, name='gantt-chart'),
-    path('api/v1/programas/', views.ProgramListView.as_view(), name='program-list'),
     path('api/v1/programas/<int:pk>/update-prio/', views.UpdatePriorityView.as_view(), name='program-detail'),
     path('api/v1/programas/<int:pk>/delete-orders/', views.UpdatePriorityView.as_view(), name='delete_orders'),
     path('api/v1/programas/<int:pk>/delete/', views.ProgramListView.as_view(), name='delete_program'),
     path('api/v1/programas/<int:pk>/generar_pdf/', views.GenerateProgramPDF.as_view(), name='generar_pdf'),
+    path('api/v1/programas/<int:programa_id>/procesos/<int:proceso_id>/timeline/', views.ProcesoTimelineView.as_view(), name='proceso-timeline'),
+    path('api/v1/procesos/<int:pk>/', views.ProcesoDetailView.as_view(), name='proceso-detail'),
+    path('api/v1/procesos/', views.ProcesoListView.as_view(), name='proceso-list'),
 ]
 
 #Urls para maquinas dentro del programa

@@ -6,6 +6,7 @@ import { getAllMachines } from '../../api/machines.api';
 import { toast } from 'react-hot-toast';
 import {OperatorForm} from './OperatorForm';
 import { OperatorMachinesModal } from './OperatorMachinesModal';
+import { OperatorAsignacionesModal } from './OperatorAsignacionesModal';
 
 export function OperatorManagementPage(){
     const [operators, setOperators] = useState([]);
@@ -19,6 +20,9 @@ export function OperatorManagementPage(){
     });
     const [showMachinesModal, setShowMachinesModal] = useState(false);
     const [selectedOperator, setSelectedOperator] = useState(null);
+
+    const [showAsignacionesModal, setShowAsignacionesModal] = useState(false);
+    const [selectedOperatorForAsignaciones, setSelectedOperatorForAsignaciones] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -53,6 +57,11 @@ export function OperatorManagementPage(){
     };
 
     const handleShowMachines = (operator) => {
+        // Asegurarse de que operator.maquinas exista
+        if(!operator.maquinas){
+            console.warn(`El operador ${operator.nombre} no tiene máquinas definidas`);
+            operator.maquinas = []; // Asignar un array vacío para evitar errores
+        }
         setSelectedOperator(operator);
         setShowMachinesModal(true);        
     }
@@ -62,6 +71,11 @@ export function OperatorManagementPage(){
         return operator.nombre.toLowerCase().includes(searchTerm) ||
                 operator.rut.toLowerCase().includes(searchTerm);
     });
+
+    const handleShowAsignaciones = (operator) => {
+        setSelectedOperatorForAsignaciones(operator);
+        setShowAsignacionesModal(true);
+    }
 
     return (
         <>
@@ -117,7 +131,6 @@ export function OperatorManagementPage(){
                                     <tr>
                                         <th>Nombre</th>
                                         <th>RUT</th>
-                                        <th>Rol</th>
                                         <th>Empresa</th>
                                         <th>Máquinas</th>
                                         <th>Estado</th>
@@ -126,10 +139,10 @@ export function OperatorManagementPage(){
                                 </thead>
                                 <tbody>
                                     {filteredOperators.map(operator => (
+                                        console.log(operator),
                                         <tr key={operator.id}>
                                             <td>{operator.nombre}</td>
-                                            <td>{operator.rut}</td>
-                                            <td>{operator.rol.nombre}</td>
+                                            <td>{operator.rut}</td> 
                                             <td>{operator.empresa.nombre}</td>
                                             <td>
                                                 <Button 
@@ -137,7 +150,7 @@ export function OperatorManagementPage(){
                                                     size="sm"
                                                     onClick={() => handleShowMachines(operator)}
                                                 >
-                                                    Ver Máquinas ({operator.maquinas.length})
+                                                    Ver Máquinas ({operator.maquinas_habilitadas ? operator.maquinas_habilitadas.length : 0})
                                                 </Button>
                                             </td>
                                             <td>
@@ -155,12 +168,12 @@ export function OperatorManagementPage(){
                                                     <i className="fas fa-edit">Editar</i>
                                                 </Button>
                                                 <Button 
-                                                    variant="danger" 
+                                                    variant="success" 
                                                     size="sm" 
-                                                    onClick={() => handleEdit(operator)}
+                                                    onClick={() => handleShowAsignaciones(operator)}
                                                     className="me-2"
                                                 >
-                                                    <i className="fas fa-edit">Eliminar</i>
+                                                    <i className="fas fa-edit">Ver Asignaciones</i>
                                                 </Button>
                                                 
                                             </td>
@@ -185,6 +198,13 @@ export function OperatorManagementPage(){
                 handleClose={() => setShowMachinesModal(false)}
                 operator={selectedOperator}
             />
+
+            <OperatorAsignacionesModal 
+                show={showAsignacionesModal}
+                handleClose={() => setShowAsignacionesModal(false)}
+                operator={selectedOperatorForAsignaciones}
+            />
+
         </>
     );
 }

@@ -1,10 +1,8 @@
 import axios from './axiosConfig';
 
-const API_URL = 'http://localhost:8000/users/api/v1';
-
 export const getAllUsers = async () => {
     try {
-        const response = await axios.get(`${API_URL}/users/`);
+        const response = await axios.get(`/users/api/v1/users/`);
         console.log('Headers de la petición:', response.config.headers);
         return response.data;
     } catch (error) {
@@ -19,7 +17,7 @@ export const getAllUsers = async () => {
 export const createUser = async (userData) => {
     try {
         console.log('Datos a enviar:', userData)
-        const response = await axios.post(`${API_URL}/users/create/`, userData);
+        const response = await axios.post(`/users/api/v1/users/create/`, userData);
         return response.data;
     } catch (error) {
         console.error('Error completo:', error.response?.data);
@@ -34,7 +32,7 @@ export const updateUser = async(userId, userData) => {
 
         console.log('Datos a enviar:', dataToSend);
 
-        const response = await axios.put(`${API_URL}/users/${userId}/`, dataToSend);
+        const response = await axios.put(`/users/api/v1/users/${userId}/`, dataToSend);
         return response.data;
     } catch (error) {
         console.error('Error completo: ', error.response?.data);
@@ -44,7 +42,7 @@ export const updateUser = async(userId, userData) => {
 
 export const toggleUserStatus = async(userId) => {
     try {
-        const response = await axios.post(`${API_URL}/users/${userId}/toggle-status/`);
+        const response = await axios.post(`/users/api/v1/users/${userId}/toggle-status/`);
         return response.data;
     } catch (error) {
         throw error;
@@ -53,7 +51,7 @@ export const toggleUserStatus = async(userId) => {
 
 export const getUserById = async (id) => {
     try{
-        const response = await axios.get(`${API_URL}/users/${id}/`);
+        const response = await axios.get(`/users/api/v1/users/${id}/`);
         return response.data;
     } catch (error) {
         throw error;

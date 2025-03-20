@@ -14,7 +14,9 @@ import { ProfilePage } from './components/Login/ProfilePage';
 import { UserManagementPage  } from './components/Admin/UserManagementPage';
 import { UserFormPage } from './components/Admin/UserFormPage';
 import { OperatorManagementPage } from './components/Operator/OperatorManagementPage';
-import { ProgramaOperadores } from './components/Operator/ProgramaOperadores'
+import { ProgramaOperadores } from './components/Operator/ProgramaOperadores';
+import { MachineList } from './components/Machine/MachineList';
+import { DiagnosticoMaquinas } from './components/Machine/DiagnosticoMaquinas';
 
 function App() {
   return (
@@ -107,6 +109,16 @@ function App() {
         <Route path="/users/edit/:id" element={
           <ProtectedRoute allowedRoles={['ADMIN', ]}>
             <UserFormPage />
+          </ProtectedRoute>
+        }/>
+        <Route path="/machines" element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <MachineList/>
+          </ProtectedRoute>
+        }/>
+        <Route path="/machines-diagnostico" element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <DiagnosticoMaquinas/>
           </ProtectedRoute>
         }/>
       </Routes>

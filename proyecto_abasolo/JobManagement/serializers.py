@@ -215,14 +215,3 @@ class ProgramaProduccionSerializer(serializers.ModelSerializer):
         
         return ProgramaOrdenTrabajoSerializer(ordenes_trabajo, many=True).data
     
-class DisponibilidadMaquinaSerializer(serializers.ModelSerializer):
-    maquina = serializers.StringRelatedField()
-
-    class Meta:
-        model = DisponibilidadMaquina
-        fields = ['maquina', 'fecha_inicio', 'fecha_fin', 'ocupado']
-
-class ItemRutaOperadorSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ItemRutaOperador
-        fields = '__all__'

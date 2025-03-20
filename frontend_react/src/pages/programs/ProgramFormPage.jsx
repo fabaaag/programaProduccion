@@ -1,10 +1,11 @@
 import { useForm } from "react-hook-form";
 import { createProgram, getProgram } from "../../api/programs.api";
+import axios from '../../api/axiosConfig';
 import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import CompNavbar from "../../components/Navbar/CompNavbar";
-import axios from "axios";
+
 
 export function ProgramFormPage() {
   const { register, handleSubmit, formState: { errors }, setValue } = useForm();
@@ -15,7 +16,7 @@ export function ProgramFormPage() {
   // Fetch unassigned orders from the backend
   const fetchUnassignedOrders = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/gestion/api/v1/ordenes/no_asignadas/");
+      const response = await axios.get("/gestion/api/v1/ordenes/no_asignadas/");
       console.log(response.data);
       setUnassignedOrders(response.data);
     } catch (error) {

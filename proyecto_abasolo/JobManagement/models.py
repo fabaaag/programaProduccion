@@ -29,12 +29,22 @@ class Proceso(models.Model):
     descripcion = models.CharField(max_length=100, null=False, blank=False)
     carga = models.DecimalField(max_digits=10, decimal_places=4, default=0.0000)
     empresa = models.ForeignKey('EmpresaOT', on_delete=models.CASCADE, null=True, blank=True)
+    # Añadir esta relación
+    tipos_maquina_compatibles = models.ManyToManyField('Machine.TipoMaquina', related_name='procesos_compatibles')
 
     class Meta:
         unique_together = ('empresa', 'codigo_proceso')
 
     def __str__(self):
         return f'{self.codigo_proceso} - {self.descripcion}'
+
+    def get_maquinas_compatibles(self):
+        """Obtiene todas las máquinas compatibles con este proceso"""
+        from Machine.models import EstadoMaquina
+        return Maquina.objects.filter(
+            estado__tipo_maquina__in=self.tipos_maquina_compatibles.all(),
+            estado__disponible=True
+        ).distinct()
     
 class Ruta(models.Model):
     producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='rutas')
@@ -193,8 +203,22 @@ class ProgramaProduccion(models.Model):
             timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
             random_string = uuid.uuid4().hex[:6]
             self.nombre = f"Programa_{timestamp}_{random_string}"
+
+        #Si es un programa nuevo y no tiene fecha_fin, usamos fecha_inicio + 30 dias como valor predeterminado
+        if not self.pk and not self.fecha_fin:
+            self.fecha_fin = self.fecha_inicio + timezone.timedelta(days=30)
+
+        #Guardamos el objecto con los valores iniciales
         super().save(*args, **kwargs)
-        
+
+        #Si ya tiene OTs asociadas, calculamos la fecha_fin (para actualizaciones)
+        if self.pk and ProgramaOrdenTrabajo.objects.filter(programa=self).exists():
+            self.actualizar_fecha_fin()
+
+    def actualizar_fecha_fin(self):
+        """Método legacy manenido para compatibilidad"""
+        pass
+            
     @property
     def dias_programa(self):
         return (self.fecha_fin - self.fecha_inicio).days + 1
@@ -219,87 +243,3 @@ class ProgramaOrdenTrabajo(models.Model):
     def __str__(self):
         return f'{self.programa.nombre} - {self.orden_trabajo.codigo_ot} - Prioridad: {self.prioridad}'
 
-class ItemRutaOperador(models.Model):
-    from Operator.models import Operador
-
-    item_ruta = models.ForeignKey(ItemRuta, on_delete=models.CASCADE, related_name='operador_assignments')
-    operador = models.ForeignKey(Operador, on_delete=models.CASCADE, related_name='ruta_assignments')
-    programa_produccion = models.ForeignKey(ProgramaProduccion, on_delete=models.CASCADE, related_name='operador_assignments')
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        unique_together = ('item_ruta', 'operador', 'programa_produccion')  # Ensures unique assignments per program
-
-    def __str__(self):
-        return f"{self.operador.nombre} assigned to {self.item_ruta} for {self.programa_produccion.nombre}"
-    
-class DisponibilidadMaquina(models.Model):
-    """
-    Representa los intervalos de tiempo durante los cuales una máquina específica está ocupada o disponible para producción.
-
-    Este modelo es crucial para gestionar la planificación y asignación de máquinas en el entorno de producción, permitiendo
-    registrar no solo los periodos en la que la máquina se encuentr asignada, sino que también asegura que las asignaciones
-    no se solapen y que se respeten los tiempos de mantenimiento o inactividad.
-
-    Atributos:
-        maquina (ForeignKey): Referencia a la máquina cuya disponibilidad se está registrando.
-        fecha_inicio (DateTimeField): Fecha y hora en que comienza el periodo de ocupación de la máquina.
-        fecha_fin (DateTimeField): Fecha y hora en que finaliza el periodo de ocupación.
-        ocupado (BooleanField): Indica si la máquina está ocupada (True) o disponible (False) durante el intervalo especificado.
-        programa (ForeignKey): Referencia al programa de producción asociado.
-
-    Métodos:
-        __str__(self): Devuelve una representación en cadena que muestra la máquina y el intervalo de tiempo durante el cual está ocupada.
-    """
-    maquina = models.ForeignKey(Maquina, on_delete=models.CASCADE)
-    fecha_inicio = models.DateTimeField()
-    fecha_fin = models.DateTimeField()
-    ocupado = models.BooleanField(default=False)
-    programa = models.ForeignKey('JobManagement.ProgramaProduccion', on_delete=models.CASCADE, related_name='disponibilidades_maquina', null=True)
-
-    def __str__(self):
-        return f"{self.maquina.codigo_maquina} ocupada desde {self.fecha_inicio} hasta {self.fecha_fin}"
-    
-class Asignacion(models.Model):
-    """
-    Gestiona la asignación de recursos a las órdenes de trabajo, asegurando el uso eficiente de máquinas y operadores.
-    
-    Atributos:
-        maquina (ForeignKey): La máquina asignada.
-        orden_trabajo (ForeignKey): La orden de trabajo a la que se asigna la máquina.
-        fecha_inicio (DateTimeField): Fecha y hora de inicio de la asignación.
-        fecha_fin (DateTimeField): Fecha y hora en que termina la asignación.
-        ocupado (BooleanField): Estado que indica si la máquina está ocupada en este intervalo.
-        programa (ForeignKey): Referencia al programa de producción asociado.
-
-    """
-    maquina = models.ForeignKey(Maquina, on_delete=models.CASCADE, related_name="asignaciones")
-    orden_trabajo = models.ForeignKey(OrdenTrabajo, on_delete=models.CASCADE, related_name="asignaciones")
-    disponibilidad_maquina = models.ForeignKey(DisponibilidadMaquina, on_delete=models.CASCADE, related_name="asignaciones", null=True)
-    ocupado = models.BooleanField(default=True)
-    programa = models.ForeignKey('JobManagement.ProgramaProduccion', on_delete=models.CASCADE, related_name='asignaciones', null=True)
-
-    class Meta:
-        verbose_name = "Asignación de Recurso"
-        verbose_name_plural = "Asignaciones de Recursos"
-
-    def __str__(self):
-        return f"{self.maquina.codigo_maquina} assigned to {self.orden_trabajo} from {self.disponibilidad_maquina.fecha_inicio} to {self.disponibilidad_maquina.fecha_fin}"
-
-class AtrasoDiarioOT(models.Model):
-    """
-    Modelo que registra diariamente los días de atrasos acumulados para las OT con situación Pendiente (P) y Sin imprimir.
-
-    Atributos:
-        fecha (DateField): Fecha de registro del atraso.
-        dias_acumulados_atraso (IntegerField): Total de días de atraso acumulados del día.
-    """
-    fecha = models.DateField(auto_now_add=True, unique=True)
-    dias_acumulados_atraso = models.IntegerField()
-    dias_acumulados_atraso_stock = models.IntegerField(default=0)
-    dias_acumulados_atraso_pedido = models.IntegerField(default=0)
-
-
-    def __str__(self):
-        return f'Fecha: {self.fecha} - Días Atraso: {self.dias_acumulados_atraso}'

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Form, Button, Modal, Alert } from 'react-bootstrap';
-import { createOperator, updateOperator, getRoles} from '../../api/operator.api.js';
+import { Form, Button, Modal, Alert, Row, Col } from 'react-bootstrap';
+import { createOperator, updateOperator, deleteOperator } from '../../api/operator.api.js';
 import { getAllMachines } from '../../api/machines.api.js';
 import { getAllEmpresas } from '../../api/empresas.api.js';
 import { toast } from 'react-hot-toast';
@@ -9,17 +9,18 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
     const [formData, setFormData] = useState({
         nombre: '',
         rut: '',
-        rol: '',
         empresa: '',
         maquinas: [],
         activo: true
     });
 
-    const [roles, setRoles] = useState([]);
+
     const [machines, setMachines] = useState([]);
     const [empresas, setEmpresas] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
 
     useEffect(() => {
         loadInitialData();
@@ -30,9 +31,8 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
             setFormData({
                 nombre: operatorToEdit.nombre,
                 rut: operatorToEdit.rut,
-                rol:operatorToEdit.rol.id,
                 empresa: operatorToEdit.empresa || 1,
-                maquinas: operatorToEdit.maquinas.map(m => m.id),
+                maquinas: operatorToEdit.maquinas_habilitadas || [],
                 activo: operatorToEdit.activo
             });
         } else {
@@ -42,12 +42,10 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
 
     const loadInitialData = async () => {
         try{
-            const [rolesData, machinesData, empresasData] = await Promise.all([
-                getRoles(),
+            const [machinesData, empresasData] = await Promise.all([
                 getAllMachines(),
                 getAllEmpresas()
             ]);
-            setRoles(rolesData);
             setMachines(machinesData);
             setEmpresas(empresasData)
         } catch(error){
@@ -60,7 +58,6 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
         setFormData({
             nombre: '',
             rut: '',
-            rol: '',
             empresa: 1,
             maquinas: [],
             activo: true
@@ -89,11 +86,6 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
             return;
         }
 
-        if(!formData.rol){
-            setError('Debe seleccionar un rol');
-            return;
-        }
-
         if(formData.maquinas.length === 0){
             setError('Debe seleccionar al menos una máquina');
             return
@@ -101,15 +93,27 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
 
         setLoading(true);
         try{
+            console.log('maqs operatorform:', formData.maquinas )
             const dataToSend = {
-                ...formData, 
-                maquinas: formData.maquinas.map(id => parseInt(id)),
-                rol: parseInt(formData.rol),
-                empresa: parseInt(formData.empresa)
+                nombre: formData.nombre,
+                rut: formData.rut,
+                empresa: parseInt(formData.empresa),
+                maquinas_habilitadas: formData.maquinas,
+                activo: formData.activo
             };
 
             console.log('Datos a enviar:', dataToSend);
 
+            if(operatorToEdit) {
+                await updateOperator(operatorToEdit.id, dataToSend);
+            }else{
+                onOperatorSaved();
+                handleClose()
+                await createOperator(dataToSend);
+
+            }
+
+            
             if(operatorToEdit){
                 await updateOperator(operatorToEdit.id, formData);
                 toast.success('Operador actualizado exitosamente');
@@ -145,6 +149,22 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
         }));
     };
 
+    const handleDelete = async () => {
+        setLoading(true);
+        try{
+            await deleteOperator(operatorToEdit.id);
+            toast.success('Operador eliminado exitosamente');
+            onOperatorSaved();
+            handleClose();
+        } catch(error) {
+            console.error('Error al eliminar operador:', error);
+            const errorMessage = error.response?.data?.detail || 'Error al eliminar el operador';
+            setError(errorMessage);
+        } finally {
+            setLoading(false);
+            setShowDeleteConfirm(false);
+        }
+    }
     return (
         <Modal show={show} onHide={handleClose} backdrop="static" keyboard={false}>
             <Form onSubmit={handleSubmit}>
@@ -180,23 +200,6 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
                         <Form.Text className='text-muted'>
                             Formato: XX.XXX.XXX-X
                         </Form.Text>
-                    </Form.Group>
-
-                    <Form.Group className='mb-3'>
-                        <Form.Label>Rol</Form.Label>
-                        <Form.Select
-                            name='rol'
-                            value={formData.rol}
-                            onChange={handleChange}
-                            placeholder="XX.XXX.XXX-X"
-                        >
-                            <option value="">Seleccione un rol...</option> 
-                            {roles.map(rol => (
-                                <option key={rol.id} value={rol.id}>
-                                    {rol.nombre}
-                                </option>
-                            ))}
-                        </Form.Select>
                     </Form.Group>
 
                     <Form.Group className='mb-3'>
@@ -245,14 +248,49 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
                         />
 
                     </Form.Group>
+
+                    {/*Confirmación de eliminación*/}
+                    {showDeleteConfirm && operatorToEdit && (
+                        <Alert variant="danger">
+                            <p>¿Está seguro que desea eliminar al operador {operatorToEdit.nombre}?</p>
+                            <div className="d-flex justify-content-end">
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="me-2"
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={handleDelete}
+                                >Confirmar Eliminación</Button>
+                            </div>
+                        </Alert>
+                    )}
                 </Modal.Body>
                 <Modal.Footer>
-                    <Button variant="secondary" onClick={handleClose} disabled={loading}>
-                        Cancelar
-                    </Button>
-                    <Button variant="primary" type="submit" disabled={loading}>
-                        {loading ? 'Guardando...' : (operatorToEdit ? 'Actualizar' : 'Crear')}
-                    </Button>
+                    <Row className="w-100">
+                        <Col>
+                            {operatorToEdit && (
+                                <Button
+                                    variant="danger"
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    disabled={loading || showDeleteConfirm}
+                                >Eliminar</Button>
+                            )}
+                        </Col>
+                        <Col className="text-end">
+                            <Button variant="secondary" onClick={handleClose} disabled={loading} className="me-2">
+                                Cancelar
+                            </Button>
+                            <Button variant="primary" type="submit" disabled={loading}>
+                                {loading ? 'Guardando...' :(operatorToEdit ? 'Actualizar' : 'Crear')}
+                            </Button>
+                        </Col>
+                    </Row>
                 </Modal.Footer>
             </Form>
         </Modal>

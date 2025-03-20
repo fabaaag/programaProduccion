@@ -39,7 +39,7 @@ export function Login(){
             if(data.user.rol === 'ADMIN' || data.user.rol === 'SUPERVISOR'){
                 navigate('/home');
             }else {
-                navigate('/home');
+                navigate('/login');
             }
         }catch (error){
             console.error('Error completo:', error);
@@ -66,7 +66,7 @@ export function Login(){
                                 value={credentials.username}
                                 onChange={(e) => setCredentials({
                                     ...credentials,
-                                    username: e.target.value
+                                    username: e.target.value.trimEnd()
                                 })}
                                 required
                             />
