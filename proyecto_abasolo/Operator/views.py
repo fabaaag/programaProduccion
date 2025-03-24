@@ -237,7 +237,7 @@ class AsignacionOperadorView(APIView):
             
             serializer = AsignacionOperadorSerializer(asignacion)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-
+    
         except Exception as e:
             return Response(
                 {"error": f"Error al procesar la asignación: {str(e)}"},
@@ -258,7 +258,7 @@ class OperadorTareasView(APIView):
 
     def get(self, request, pk):
         """Obtiene todas las tareas asignadas a un operador específico, organizadas por programa y orden de trabajo"""
-        
+
         try:
             operador = get_object_or_404(Operador, pk=pk)
 
@@ -323,7 +323,7 @@ class OperadorTareasView(APIView):
                     print(f'[Backend] Error procesando asignación {asignacion.id}: {str(e)}')
 
             print(f'[Backend] Total de tareas procesadas: {len(tareas_asignadas)}')
-
+            
             return Response({
                 'operador': {
                     'id': operador.id,

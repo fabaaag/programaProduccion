@@ -436,7 +436,7 @@ class OTView(generics.ListAPIView):
 class ProgramListView(generics.ListAPIView):
     queryset = ProgramaProduccion.objects.all()
     serializer_class = ProgramaProduccionSerializer
-    
+
 
     def delete(self, request, pk):
         try:
@@ -860,16 +860,16 @@ def generate_routes_data(program):
                 produccion_acumulada[i] += interval['unidades']
 
                 items.append({
-                        "id": f'item_{item_ruta.id}_{idx}',
-                    "ot_id": f"ot_{ot.id}",
-                    "proceso_id": proceso_id,
-                        "name": f"{proceso.descripcion} - {interval['unidades']:.0f} de {item_ruta.cantidad_pedido} unidades",
-                        "start_time": interval['fecha_inicio'].strftime('%Y-%m-%d %H:%M:%S'),
-                        "end_time": interval['fecha_fin'].strftime('%Y-%m-%d %H:%M:%S'),
-                        "cantidad_total": float(item_ruta.cantidad_pedido),
-                        "cantidad_intervalo": float(interval['unidades']),
-                        "unidades_restantes": float(interval['unidades_restantes']),
-                    "estandar": item_ruta.estandar
+                            "id": f'item_{item_ruta.id}_{idx}',
+                            "ot_id": f"ot_{ot.id}",
+                            "proceso_id": proceso_id,
+                            "name": f"{proceso.descripcion} - {interval['unidades']:.0f} de {item_ruta.cantidad_pedido} unidades",
+                            "start_time": interval['fecha_inicio'].strftime('%Y-%m-%d %H:%M:%S'),
+                            "end_time": interval['fecha_fin'].strftime('%Y-%m-%d %H:%M:%S'),
+                            "cantidad_total": float(item_ruta.cantidad_pedido),
+                            "cantidad_intervalo": float(interval['unidades']),
+                            "unidades_restantes": float(interval['unidades_restantes']),
+                        
                 })
 
                 # Verificar si el siguiente proceso puede comenzar
@@ -938,12 +938,12 @@ class UpdatePriorityView(APIView):
         try:
             with transaction.atomic():
                 for index, order in enumerate(order_data):
-                    prog_ot = ProgramaOrdenTrabajo.objects.get(
-                        programa=programa,
+                        prog_ot = ProgramaOrdenTrabajo.objects.get(
+                            programa=programa,
                         orden_trabajo_id=order['id']
-                    )
-                    prog_ot.prioridad = index + 1
-                    prog_ot.save()
+                        )
+                        prog_ot.prioridad = index + 1
+                        prog_ot.save()
                     
             # Actualizar fecha_fin después de los cambios
             programa.actualizar_fecha_fin()
@@ -964,7 +964,7 @@ class UpdatePriorityView(APIView):
                     'orden_trabajo_codigo_ot': ot.codigo_ot,
                     'orden_trabajo_descripcion_producto_ot': ot.descripcion_producto_ot
                 })
-
+            
             return Response({
                 "message": "Prioridades actualizadas correctamente",
                 "ordenes_trabajo": ordenes_trabajo
@@ -2238,7 +2238,6 @@ class ProcesoDetailView(APIView):
                     'id': tipo.id,
                     'codigo': tipo.codigo,
                     'descripcion': tipo.descripcion,
-                    'accion': tipo.accion
                 } for tipo in proceso.tipos_maquina_compatibles.all()]
             }
             return Response(data)
@@ -2262,7 +2261,6 @@ class ProcesoListView(APIView):
                     'id': tipo.id,
                     'codigo': tipo.codigo,
                     'descripcion': tipo.descripcion,
-                    'accion': tipo.accion
                 } for tipo in proceso.tipos_maquina_compatibles.all()]
             } for proceso in procesos]
             return Response(data)

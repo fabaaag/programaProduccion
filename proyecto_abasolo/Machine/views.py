@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import TipoMaquina, EstadoOperatividad, EstadoMaquina
 from JobManagement.models import Maquina, Proceso, OrdenTrabajo
 from django.shortcuts import get_object_or_404
+from .serializers import TipoMaquinaSerializer
 
 class MachineListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -138,46 +139,7 @@ class MachineDetailView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    def put(self, request, pk):
-        try:
-            estado_maquina = EstadoMaquina.objects.get(maquina_id=pk)
-            tipos_maquina_ids = request.data.get('tipos_maquina_ids', [])  # Cambio aquí
-
-            if tipos_maquina_ids:
-                # Verificar que todos los tipos existan
-                tipos_maquina = TipoMaquina.objects.filter(id__in=tipos_maquina_ids)
-                if len(tipos_maquina) != len(tipos_maquina_ids):
-                    return Response(
-                        {'error': 'Uno o más tipos de máquina no existen'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-
-                # Actualizar los tipos de máquina
-                estado_maquina.tipos_maquina.set(tipos_maquina)
-                
-                return Response({
-                    'message': 'Tipos de máquina actualizados correctamente',
-                    'tipos_maquina': [{
-                        'id': tipo.id,
-                        'codigo': tipo.codigo,
-                        'descripcion': tipo.descripcion,
-                    } for tipo in tipos_maquina]
-                })
-            else:
-                return Response(
-                    {'error': 'tipos_maquina_ids es requerido'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        except EstadoMaquina.DoesNotExist:
-            return Response(
-                {'error': 'Estado de máquina no encontrado'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+    
         
 class TipoMaquinaView(APIView):
     permission_classes = [IsAuthenticated]
@@ -185,14 +147,8 @@ class TipoMaquinaView(APIView):
         """Obtener todos los tipos de máquina con su información completa"""
         try:
             tipos = TipoMaquina.objects.all()
-            data = [{
-                'id': tipo.id,
-                'codigo': tipo.codigo,
-                'descripcion': tipo.descripcion,
-                # Incluir procesos compatibles si es necesario
-                'procesos_compatibles': list(tipo.procesos_compatibles.values('id', 'codigo_proceso', 'descripcion'))
-            } for tipo in tipos]
-            return Response(data)
+            serializer = TipoMaquinaSerializer(tipos, many=True)
+            return Response(serializer.data)
         except Exception as e:
             return Response(
                 {'error': str(e)},
@@ -276,3 +232,85 @@ class DiagnosticoMaquinasView(APIView):
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    def put(self, request, pk):
+        try:
+            # Obtener o crear el estado de la máquina
+            maquina = get_object_or_404(Maquina, pk=pk)
+            estado_maquina, created = EstadoMaquina.objects.get_or_create(
+                maquina=maquina,
+                defaults={
+                    'estado_operatividad': EstadoOperatividad.objects.get_or_create(
+                        estado='OP',
+                        defaults={'descripcion': 'Operativa'}
+                    )[0]
+                }
+            )
+
+            # Obtener los tipos de máquina
+            tipos_maquina_ids = request.data.get('tipos_maquina_ids', [])
+            
+            if tipos_maquina_ids:
+                # Actualizar los tipos de máquina
+                estado_maquina.tipos_maquina.set(tipos_maquina_ids)
+                
+                return Response({
+                    'message': 'Tipos de máquina actualizados correctamente',
+                    'tipos_maquina': list(estado_maquina.tipos_maquina.values('id', 'codigo', 'descripcion'))
+                })
+            else:
+                return Response(
+                    {'error': 'tipos_maquina_ids es requerido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+
+"""
+def put(self, request, pk):
+        try:
+            estado_maquina = EstadoMaquina.objects.get(maquina_id=pk)
+            tipos_maquina_ids = request.data.get('tipos_maquina_ids', [])  # Cambio aquí
+
+            if tipos_maquina_ids:
+                # Verificar que todos los tipos existan
+                tipos_maquina = TipoMaquina.objects.filter(id__in=tipos_maquina_ids)
+                if len(tipos_maquina) != len(tipos_maquina_ids):
+                    return Response(
+                        {'error': 'Uno o más tipos de máquina no existen'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Actualizar los tipos de máquina
+                estado_maquina.tipos_maquina.set(tipos_maquina)
+                
+                return Response({
+                    'message': 'Tipos de máquina actualizados correctamente',
+                    'tipos_maquina': [{
+                        'id': tipo.id,
+                        'codigo': tipo.codigo,
+                        'descripcion': tipo.descripcion,
+                    } for tipo in tipos_maquina]
+                })
+            else:
+                return Response(
+                    {'error': 'tipos_maquina_ids es requerido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except EstadoMaquina.DoesNotExist:
+            return Response(
+                {'error': 'Estado de máquina no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+"""

@@ -42,7 +42,7 @@ class Proceso(models.Model):
         """Obtiene todas las máquinas compatibles con este proceso"""
         from Machine.models import EstadoMaquina
         return Maquina.objects.filter(
-            estado__tipo_maquina__in=self.tipos_maquina_compatibles.all(),
+            estado__tipos_maquina__in=self.tipos_maquina_compatibles.all(),
             estado__disponible=True
         ).distinct()
     

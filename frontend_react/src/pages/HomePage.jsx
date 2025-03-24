@@ -28,7 +28,7 @@ export function HomePage() {
             <Card style={{width:"18rem"}}>
               <Card.Img variant='top' src='#' />
               <Card.Body>
-                <Card.Title>M. Materiales/Diagnosticomaqs</Card.Title>
+                <Card.Title>Mts / Diagnosticomaqs</Card.Title>
                 <Card.Text>Redirige a la página de diagns</Card.Text>
                 <div className="container d-flex justify-content-center">
                   <Button variant='primary' onClick={()=>{
@@ -56,10 +56,10 @@ export function HomePage() {
               <Card.Img variant='top' src='#' />
               <Card.Body>
                 <Card.Title>Máquinas</Card.Title>
-                <Card.Text>Redirige a la página de programas de producción</Card.Text>
+                <Card.Text>Redirige a la página de gestión de máquinas</Card.Text>
                 <div className="container d-flex justify-content-center">
                   <Button variant='primary' onClick={()=>{
-                      navigate('/programs')
+                      navigate('/machines')
                     }}>Ir</Button>
                 </div>
               </Card.Body>

@@ -11,35 +11,22 @@ function AsignacionModal({ show, onHide, maquina, onAsignacionCompleta }) {
     const [loading, setLoading] = useState(false);
     const [preview, setPreview] = useState([]);
 
-    // Resetear estados cuando se abre el modal
+    // Cargar tipos actuales de la máquina cuando se abre el modal
     useEffect(() => {
-        if (show) {
-            setSelectedProceso('');
-            setTiposDisponibles([]);
-            setSelectedTipos([]);
-            setPreview([]);
+        if (show && maquina) {
+            // Inicializar selectedTipos con los tipos actuales de la máquina
+            const tiposActuales = maquina.tipos.map(tipo => tipo.id);
+            setSelectedTipos(tiposActuales);
             cargarProcesos();
         }
-    }, [show]);
+    }, [show, maquina]);
 
-    // Cuando se selecciona un proceso, cargar sus tipos de máquina
+    // Cuando se selecciona un proceso, AÑADIR sus tipos disponibles a tiposDisponibles
     useEffect(() => {
         if (selectedProceso) {
             cargarTiposProceso();
-        } else {
-            setTiposDisponibles([]);
-            setSelectedTipos([]);
         }
     }, [selectedProceso]);
-
-    // Cuando se seleccionan tipos, mostrar preview
-    useEffect(() => {
-        if (selectedTipos.length > 0) {
-            cargarProcesosCompatibles();
-        } else {
-            setPreview([]);
-        }
-    }, [selectedTipos]);
 
     const cargarProcesos = async () => {
         try {
@@ -53,20 +40,27 @@ function AsignacionModal({ show, onHide, maquina, onAsignacionCompleta }) {
 
     const cargarTiposProceso = async () => {
         try {
-            console.log('Cargando tipos para proceso:', selectedProceso); // Debug
             const response = await axios.get(`/gestion/api/v1/procesos/${selectedProceso}/`);
-            console.log('Respuesta tipos:', response.data); // Debug
-            
             if (response.data.tipos_maquina_compatibles) {
-                setTiposDisponibles(response.data.tipos_maquina_compatibles);
-            } else {
-                setTiposDisponibles([]);
-                toast.error('No hay tipos de máquina disponibles para este proceso');
+                // Añadir nuevos tipos sin eliminar los existentes
+                setTiposDisponibles(prevTipos => {
+                    const nuevosTipos = response.data.tipos_maquina_compatibles;
+                    const tiposExistentes = prevTipos;
+                    
+                    // Combinar tipos existentes con nuevos, evitando duplicados
+                    const todosLosTipos = [...tiposExistentes];
+                    nuevosTipos.forEach(nuevoTipo => {
+                        if (!todosLosTipos.some(t => t.id === nuevoTipo.id)) {
+                            todosLosTipos.push(nuevoTipo);
+                        }
+                    });
+                    
+                    return todosLosTipos;
+                });
             }
         } catch (error) {
             console.error('Error al cargar tipos:', error);
             toast.error('Error al cargar tipos de máquina');
-            setTiposDisponibles([]);
         }
     };
 
@@ -86,98 +80,102 @@ function AsignacionModal({ show, onHide, maquina, onAsignacionCompleta }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!selectedProceso) {
-            toast.error('Por favor seleccione un proceso');
-            return;
-        }
-    
         setLoading(true);
         try {
-            // Obtener los tipos de máquina del proceso seleccionado
-            const tiposIds = tiposDisponibles
-                .filter(tipo => selectedTipos.includes(tipo.id))
-                .map(tipo => tipo.id);
-    
-            // Verificar que hay tipos seleccionados
-            if (tiposIds.length === 0) {
-                toast.error('Por favor seleccione al menos un tipo de máquina');
-                return;
-            }
-    
-            // Hacer la petición con los tipos seleccionados
-            await axios.put(`/machine/api/v1/machines/${maquina.id}/`, {
-                tipos_maquina_ids: tiposIds
+            // Enviar todos los tipos seleccionados
+            await axios.put(`/machine/api/v1/machines-diagnostico/${maquina.id}/`, {
+                tipos_maquina_ids: selectedTipos
             });
-    
+
             toast.success('Tipos de máquina actualizados correctamente');
             onAsignacionCompleta();
             onHide();
         } catch (error) {
             console.error('Error al asignar tipos:', error);
-            const errorMessage = error.response?.data?.error || 'Error al asignar tipos de máquina';
-            toast.error(errorMessage);
+            toast.error(error.response?.data?.error || 'Error al asignar tipos de máquina');
         } finally {
             setLoading(false);
         }
     };
 
+    // Modificar el título según si es edición o nueva asignación
+    const modalTitle = maquina?.tipos?.length > 0 ? 'Editar Tipos de Máquina' : 'Asignar Tipo a Máquina';
+
     return (
-            <Modal show={show} onHide={onHide} size="lg">
-                <Modal.Header closeButton>
-                    <Modal.Title>Asignar Tipo a Máquina</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    <p>
-                        <strong>Máquina:</strong> {maquina?.codigo} - {maquina?.descripcion}
-                    </p>
-                    <Form onSubmit={handleSubmit}>
-                        {/* Selector de Proceso */}
-                        <Form.Group className="mb-3">
-                            <Form.Label>Seleccione un Proceso</Form.Label>
-                            <Form.Select
-                                value={selectedProceso}
-                                onChange={(e) => {
-                                    console.log('Proceso seleccionado:', e.target.value); // Debug
-                                    setSelectedProceso(e.target.value);
-                                }}
-                                disabled={loading}
-                            >
-                                <option value="">Seleccione...</option>
-                                {procesos.map(proceso => (
-                                    <option key={proceso.id} value={proceso.id}>
-                                        {proceso.codigo_proceso} - {proceso.descripcion}
-                                    </option>
-                                ))}
-                            </Form.Select>
-                        </Form.Group>
+        <Modal show={show} onHide={onHide} size="lg">
+            <Modal.Header closeButton>
+                <Modal.Title>{modalTitle}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+                <p>
+                    <strong>Máquina:</strong> {maquina?.codigo} - {maquina?.descripcion}
+                </p>
+                <Form onSubmit={handleSubmit}>
+                    {/* Selector de Proceso */}
+                    <Form.Group className="mb-3">
+                        <Form.Label>Seleccione un Proceso</Form.Label>
+                        <Form.Select
+                            value={selectedProceso}
+                            onChange={(e) => {
+                                console.log('Proceso seleccionado:', e.target.value); // Debug
+                                setSelectedProceso(e.target.value);
+                            }}
+                            disabled={loading}
+                        >
+                            <option value="">Seleccione...</option>
+                            {procesos.map(proceso => (
+                                <option key={proceso.id} value={proceso.id}>
+                                    {proceso.codigo_proceso} - {proceso.descripcion}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </Form.Group>
         
-                        {/* Selector de Tipos de Máquina */}
-                        {selectedProceso && (
-                            <Form.Group className="mb-3">
-                                <Form.Label>Tipos de Máquina Disponibles</Form.Label>
-                                {tiposDisponibles.length > 0 ? (
-                                    tiposDisponibles.map(tipo => (
-                                        <Form.Check
-                                            key={tipo.id}
-                                            type="checkbox"
-                                            id={`tipo-${tipo.id}`}
-                                            label={`${tipo.codigo} - ${tipo.accion}`}
-                                            checked={selectedTipos.includes(tipo.id)}
-                                            onChange={(e) => {
-                                                if (e.target.checked) {
-                                                    setSelectedTipos([...selectedTipos, tipo.id]);
-                                                } else {
-                                                    setSelectedTipos(selectedTipos.filter(id => id !== tipo.id));
-                                                }
-                                            }}
-                                            disabled={loading}
-                                        />
-                                    ))
-                                ) : (
-                                    <p className="text-muted">No hay tipos de máquina disponibles para este proceso</p>
-                                )}
-                            </Form.Group>
-                        )}
+                    {/* Selector de Tipos de Máquina */}
+                    {selectedProceso && (
+                        <Form.Group className="mb-3">
+                            <Form.Label>Tipos de Máquina Disponibles</Form.Label>
+                            {tiposDisponibles.length > 0 ? (
+                                tiposDisponibles.map(tipo => (
+                                    <Form.Check
+                                        key={tipo.id}
+                                        type="checkbox"
+                                        id={`tipo-${tipo.id}`}
+                                        label={`${tipo.codigo} - ${tipo.descripcion}`}
+                                        checked={selectedTipos.includes(tipo.id)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setSelectedTipos([...selectedTipos, tipo.id]);
+                                            } else {
+                                                setSelectedTipos(selectedTipos.filter(id => id !== tipo.id));
+                                            }
+                                        }}
+                                        disabled={loading}
+                                    />
+                                ))
+                            ) : (
+                                <p className="text-muted">No hay tipos de máquina disponibles para este proceso</p>
+                            )}
+                        </Form.Group>
+                    )}
+
+                    {/* Mostrar tipos actuales si existen */}
+                    {maquina?.tipos?.length > 0 && (
+                        <div className="mb-3">
+                            <h6>Tipos actuales:</h6>
+                            <div className="border p-2 rounded mb-3">
+                                {maquina.tipos.map(tipo => (
+                                    <Badge 
+                                        key={tipo.id} 
+                                        bg="info" 
+                                        className="me-1 mb-1"
+                                    >
+                                        {tipo.codigo} - {tipo.descripcion}
+                                    </Badge>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Preview de Procesos Compatibles */}
                     {preview.length > 0 && (
@@ -206,7 +204,7 @@ function AsignacionModal({ show, onHide, maquina, onAsignacionCompleta }) {
                             type="submit" 
                             disabled={loading || !selectedProceso}
                         >
-                            {loading ? 'Asignando...' : 'Asignar'}
+                            {loading ? 'Guardando...' : (maquina?.tipos?.length > 0 ? 'Actualizar Tipos' : 'Asignar Tipos')}
                         </Button>
                     </div>
                 </Form>
@@ -244,6 +242,27 @@ export function DiagnosticoMaquinas() {
         setShowModal(true);
     };
 
+    const handleRemoveTipo = async (maquina, tipoId) => {
+        if (window.confirm('¿Está seguro de eliminar este tipo de máquina?')) {
+            try {
+                // Filtrar el tipo a eliminar y mantener los demás
+                const nuevosTypes = maquina.tipos
+                    .filter(t => t.id !== tipoId)
+                    .map(t => t.id);
+
+                await axios.put(`/machine/api/v1/machines-diagnostico/${maquina.id}/`, {
+                    tipos_maquina_ids: nuevosTypes
+                });
+
+                toast.success('Tipo de máquina eliminado correctamente');
+                fetchDiagnostico(); // Recargar los datos
+            } catch (error) {
+                console.error('Error al eliminar tipo:', error);
+                toast.error('Error al eliminar el tipo de máquina');
+            }
+        }
+    };
+
     const renderMaquinaInfo = (maquina) => (
         <ListGroup.Item key={maquina.id}>
             <div className="d-flex justify-content-between align-items-start">
@@ -251,13 +270,23 @@ export function DiagnosticoMaquinas() {
                     <h6>{maquina.codigo} - {maquina.descripcion}</h6>
                     <small className="text-muted">Empresa: {maquina.empresa}</small>
                     
-                    {/* Tipos de máquina */}
+                    {/* Tipos de máquina con botones de eliminar */}
                     <div className="mt-2">
                         <strong>Tipos:</strong>{' '}
                         {maquina.tipos.length > 0 ? (
                             maquina.tipos.map(tipo => (
-                                <Badge key={tipo.id} bg="info" className="me-1">
-                                    {tipo.codigo} - {tipo.accion}
+                                <Badge key={tipo.id} bg="info" className="me-1 position-relative">
+                                    {tipo.codigo}
+                                    <button 
+                                        className="btn btn-link btn-sm text-danger p-0 ms-1"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveTipo(maquina, tipo.id);
+                                        }}
+                                        style={{ fontSize: '0.8rem' }}
+                                    >
+                                        ×
+                                    </button>
                                 </Badge>
                             ))
                         ) : (
@@ -291,15 +320,14 @@ export function DiagnosticoMaquinas() {
                         </div>
                     )}
                 </div>
-                {(!maquina.tipos.length || !maquina.procesos.length) && (
-                    <Button 
-                        variant="outline-primary" 
-                        size="sm"
-                        onClick={() => handleAsignarTipo(maquina)}
-                    >
-                        Asignar Tipo
-                    </Button>
-                )}
+                {/* Mostrar siempre el botón de editar */}
+                <Button 
+                    variant="outline-primary" 
+                    size="sm"
+                    onClick={() => handleAsignarTipo(maquina)}
+                >
+                    {maquina.tipos.length > 0 ? 'Editar Tipos' : 'Asignar Tipo'}
+                </Button>
             </div>
         </ListGroup.Item>
     );
@@ -311,6 +339,7 @@ export function DiagnosticoMaquinas() {
     return (
         <div className="p-3">
             <h3>Diagnóstico de Máquinas</h3>
+            <a href="/home">Volver</a>
             <Row className="mt-3">
                 <Col>
                     <Accordion>
