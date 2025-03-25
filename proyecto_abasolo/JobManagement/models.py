@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from Client.models import Cliente
 from Product.models import Producto, Pieza, MateriaPrima, MeasurementUnit
+from datetime import datetime, time, timedelta
 import uuid
 
 
@@ -179,10 +180,6 @@ class OrdenTrabajo(models.Model):
             except Exception as e:
                 print(f"Error al actualizar ItemRuta: {e}")
 
-
-
-####Crear el modelo para programa produccion aqui
-
 class ProgramaProduccion(models.Model):
     nombre = models.CharField(max_length=100, unique=True, blank=True)
     #Fecha de inicio será determinada por la fecha de la ot en primera posición, y la fecha de fin se determinará por el cálculo de cuando termine el último proceso de la ultima ot
@@ -243,3 +240,136 @@ class ProgramaOrdenTrabajo(models.Model):
     def __str__(self):
         return f'{self.programa.nombre} - {self.orden_trabajo.codigo_ot} - Prioridad: {self.prioridad}'
 
+class IntervaloDisponibilidad(models.Model):
+    fecha_inicio = models.DateTimeField()
+    fecha_fin = models.DateTimeField()
+    
+
+    TIPO_CHOICES = [
+        ('MAQUINA', 'Maquina'),
+        ('OPERADOR', 'Operador')
+    ]
+    tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
+
+    class Meta:
+        abstract = True
+
+    def clean(self):
+        if self.fecha_inicio > self.fecha_fin:
+            raise ValidationError("La fecha de inicio debe ser anterior a la fecha de fin")
+
+        # Validar que esté dentro del horario (7:45 - 17:45)
+        hora_laboral_inicio = time(7, 45)
+        hora_laboral_fin = time(17, 45)
+
+        #Verificar cada día del intervalo
+        fecha_actual = self.fecha_inicio
+        while fecha_actual <= self.fecha_fin:
+            #Solo verificar días laborales(L-V)
+            if fecha_actual.weekyday() < 5: #0-4 son Lunes a Viernes
+                hora_inicio = fecha_actual.time()
+                hora_fin = min(fecha_actual.replace(hour=17, minute=45).time(), self.fecha_fin.time() if fecha_actual.date() == self.fecha_fin.date() else hora_laboral_fin)
+
+                if hora_inicio < hora_laboral_inicio or hora_fin > hora_laboral_fin:
+                    raise ValidationError(f"El intervalo del día {fecha_actual.date()} debe estar dentro del horario laboral (7:45 - 17:45)")
+                
+            fecha_actual += timedelta(days=1)
+
+    def tiene_conflicto(self, fecha_inicio, fecha_fin):
+        """Verfifica si hay conflicto con otro intervalo de tiempo"""
+        return not(fecha_fin <= self.fecha_inicio or fecha_inicio >= self.fecha_fin)
+    
+class IntervaloMaquina(IntervaloDisponibilidad):
+    maquina = models.ForeignKey('Maquina', on_delete=models.CASCADE)
+    motivo = models.CharField(max_length=255, blank=True)
+
+    def __str__(self):
+        return f"Intervalo {self.maquina.codigo_maquina} - {self.fecha_inicio.strftime('%Y-%m-%d %H:%M')} a {self.fecha_fin.strftime('%Y-%m-%d %H:%M')}"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['maquina', 'fecha_inicio'],
+                name='unique_maquina_intervalo'
+            )
+        ]
+
+    @classmethod
+    def validar_disponibilidad(cls, maquina, fecha_inicio, fecha_fin):
+        """
+        Verifica si una máquina está disponible en un intervalo de tiempo específico
+        Retorna bool, str : (está_disponible, mensaje)
+        """
+        intervalos = cls.objects.filter(
+            maquina=maquina,
+            fecha_fin__gte=fecha_inicio,
+            fecha_inicio__lte=fecha_fin
+        )
+
+        for intervalo in intervalos:
+            if intervalo.tiene_conflicto(fecha_inicio, fecha_fin):
+                return False, f"Maquina no disponible del {intervalo.fecha_inicio.strf.time('%Y-%m-%d %H:%M')} al {intervalo.fecha_fin.strftime('%Y-%m-%d H:%M')}"
+            
+        return True, "Disponible"
+    
+
+class IntervaloOperador(IntervaloDisponibilidad):
+    operador = models.ForeignKey('Operator.Operador', on_delete=models.CASCADE)
+    motivo = models.CharField(max_length=255, blank=True)
+
+    def __str__(self):
+        return f"Intervalo {self.operador.nombre} - ({self.fecha_inicio.strftime('%Y-%m-%d %H:%M')} a {self.hora_fin.strftime('%Y-%m-%d %H:%M')})"
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['operador', 'fecha_inicio'],
+                name='unique_operador_intervalo'
+            )
+        ]
+
+    @classmethod
+    def validar_disponibilidad(cls, operador, fecha, fecha_inicio, fecha_fin):
+        """
+        Verifica si un operador está disponible en un intervalo de tiempo específico
+        Retorna (bool, str): (está_disponible, mensaje)
+        """
+        intervalos = cls.objects.filter(
+            operador=operador,
+            fecha_fin__gte=fecha_inicio,
+            fecha_inicio__lte=fecha_fin
+        )
+
+        for intervalo in intervalos:
+            if intervalo.tiene_conflicto(fecha, fecha_inicio, fecha_fin):
+                return False, f"Operador no disponible de {intervalo.fecha_inicio.strftime('%Y-%m-%d %H:%M')} a {intervalo.fecha_fin.strftime('%Y-%m-%d %H:%M')}"
+            
+        return True, "Disponible"
+
+    @classmethod
+    def encontrar_siguiente_disponibilidad(cls, operador, fecha_inicio, duracion_horas):
+        """
+        Encuentra el siguiente intervalo disponible para un operador
+        """
+
+        #Obtener todos los intervalos futuros del operador
+        intervalos = cls.objects.filter(
+            operador=operador,
+            fecha_fin__gte=fecha_inicio
+        ).order_by('fecha_inicio')
+
+        fecha_propuesta = fecha_inicio
+        duracion = timedelta(hours=duracion_horas)
+
+        for intervalo in intervalos:
+            fecha_fin_propuesta = fecha_propuesta + duracion
+
+            #Si no hay conflicto, hemos encontrado un espacio
+            if not intervalo.tiene_conflicto(fecha_propuesta, fecha_fin_propuesta):
+                return fecha_propuesta
+
+            #Si hay conflicto, intentar después del intervalo actual
+            fecha_propuesta = intervalo.fecha_fin
+
+        #Si no encontramos conflictos o no hay más intervalos, usar la última fecha propuesta
+        return fecha_propuesta

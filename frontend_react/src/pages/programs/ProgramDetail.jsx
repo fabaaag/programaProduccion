@@ -401,19 +401,27 @@ export function ProgramDetail() {
                     const timelineItems = items.map((item) => ({
                         id: item.id,
                         group: `${item.ot_id}-${item.proceso_id}`,
-                        title: item.name || item.title || "Sin texto",
+                        title: `${item.name}${item.operador_nombre ? ` - Op: ${item.operador_nombre}` : ''}`,
                         start_time: new Date(item.start || item.start_time),
                         end_time: new Date(item.end || item.end_time),
                         itemProps: {
                             style: {
-                                backgroundColor: new Date(item.end || item.end_time) < new Date() ? "#ff4444" : "#4CAF50",
+                                backgroundColor: item.asignado ? "#4CAF50" : 
+                                               new Date(item.end || item.end_time) < new Date() ? "#ff4444" : 
+                                               "#FFA726",
                                 color: 'white',
                                 borderRadius: '4px',
                                 padding: '2px',
                                 marginBottom: '10px',    
                             },
+                            'data-tooltip': `
+                                ${item.name}
+                                Cantidad: ${item.cantidad_intervalo} de ${item.cantidad_total}
+                                ${item.operador_nombre ? `Operador: ${item.operador_nombre}` : 'Sin operador asignado'}
+                                Estándar: ${item.estandar} u/hr
+                            `
                         },
-                        canMove: true,
+                        canMove: false,  // Cambiado a false para mantener consistencia
                         canResize: false,
                     }));
                     setTimelineItems(timelineItems);

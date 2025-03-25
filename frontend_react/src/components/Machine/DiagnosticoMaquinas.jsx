@@ -86,7 +86,7 @@ function AsignacionModal({ show, onHide, maquina, onAsignacionCompleta }) {
             await axios.put(`/machine/api/v1/machines-diagnostico/${maquina.id}/`, {
                 tipos_maquina_ids: selectedTipos
             });
-
+    
             toast.success('Tipos de máquina actualizados correctamente');
             onAsignacionCompleta();
             onHide();
@@ -102,62 +102,62 @@ function AsignacionModal({ show, onHide, maquina, onAsignacionCompleta }) {
     const modalTitle = maquina?.tipos?.length > 0 ? 'Editar Tipos de Máquina' : 'Asignar Tipo a Máquina';
 
     return (
-        <Modal show={show} onHide={onHide} size="lg">
-            <Modal.Header closeButton>
+            <Modal show={show} onHide={onHide} size="lg">
+                <Modal.Header closeButton>
                 <Modal.Title>{modalTitle}</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-                <p>
-                    <strong>Máquina:</strong> {maquina?.codigo} - {maquina?.descripcion}
-                </p>
-                <Form onSubmit={handleSubmit}>
-                    {/* Selector de Proceso */}
-                    <Form.Group className="mb-3">
-                        <Form.Label>Seleccione un Proceso</Form.Label>
-                        <Form.Select
-                            value={selectedProceso}
-                            onChange={(e) => {
-                                console.log('Proceso seleccionado:', e.target.value); // Debug
-                                setSelectedProceso(e.target.value);
-                            }}
-                            disabled={loading}
-                        >
-                            <option value="">Seleccione...</option>
-                            {procesos.map(proceso => (
-                                <option key={proceso.id} value={proceso.id}>
-                                    {proceso.codigo_proceso} - {proceso.descripcion}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </Form.Group>
-        
-                    {/* Selector de Tipos de Máquina */}
-                    {selectedProceso && (
+                </Modal.Header>
+                <Modal.Body>
+                    <p>
+                        <strong>Máquina:</strong> {maquina?.codigo} - {maquina?.descripcion}
+                    </p>
+                    <Form onSubmit={handleSubmit}>
+                        {/* Selector de Proceso */}
                         <Form.Group className="mb-3">
-                            <Form.Label>Tipos de Máquina Disponibles</Form.Label>
-                            {tiposDisponibles.length > 0 ? (
-                                tiposDisponibles.map(tipo => (
-                                    <Form.Check
-                                        key={tipo.id}
-                                        type="checkbox"
-                                        id={`tipo-${tipo.id}`}
-                                        label={`${tipo.codigo} - ${tipo.descripcion}`}
-                                        checked={selectedTipos.includes(tipo.id)}
-                                        onChange={(e) => {
-                                            if (e.target.checked) {
-                                                setSelectedTipos([...selectedTipos, tipo.id]);
-                                            } else {
-                                                setSelectedTipos(selectedTipos.filter(id => id !== tipo.id));
-                                            }
-                                        }}
-                                        disabled={loading}
-                                    />
-                                ))
-                            ) : (
-                                <p className="text-muted">No hay tipos de máquina disponibles para este proceso</p>
-                            )}
+                            <Form.Label>Seleccione un Proceso</Form.Label>
+                            <Form.Select
+                                value={selectedProceso}
+                                onChange={(e) => {
+                                    console.log('Proceso seleccionado:', e.target.value); // Debug
+                                    setSelectedProceso(e.target.value);
+                                }}
+                                disabled={loading}
+                            >
+                                <option value="">Seleccione...</option>
+                                {procesos.map(proceso => (
+                                    <option key={proceso.id} value={proceso.id}>
+                                        {proceso.codigo_proceso} - {proceso.descripcion}
+                                    </option>
+                                ))}
+                            </Form.Select>
                         </Form.Group>
-                    )}
+        
+                        {/* Selector de Tipos de Máquina */}
+                        {selectedProceso && (
+                            <Form.Group className="mb-3">
+                                <Form.Label>Tipos de Máquina Disponibles</Form.Label>
+                                {tiposDisponibles.length > 0 ? (
+                                    tiposDisponibles.map(tipo => (
+                                        <Form.Check
+                                            key={tipo.id}
+                                            type="checkbox"
+                                            id={`tipo-${tipo.id}`}
+                                            label={`${tipo.codigo} - ${tipo.descripcion}`}
+                                            checked={selectedTipos.includes(tipo.id)}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedTipos([...selectedTipos, tipo.id]);
+                                                } else {
+                                                    setSelectedTipos(selectedTipos.filter(id => id !== tipo.id));
+                                                }
+                                            }}
+                                            disabled={loading}
+                                        />
+                                    ))
+                                ) : (
+                                    <p className="text-muted">No hay tipos de máquina disponibles para este proceso</p>
+                                )}
+                            </Form.Group>
+                        )}
 
                     {/* Mostrar tipos actuales si existen */}
                     {maquina?.tipos?.length > 0 && (
@@ -321,13 +321,13 @@ export function DiagnosticoMaquinas() {
                     )}
                 </div>
                 {/* Mostrar siempre el botón de editar */}
-                <Button 
-                    variant="outline-primary" 
-                    size="sm"
-                    onClick={() => handleAsignarTipo(maquina)}
-                >
+                    <Button 
+                        variant="outline-primary" 
+                        size="sm"
+                        onClick={() => handleAsignarTipo(maquina)}
+                    >
                     {maquina.tipos.length > 0 ? 'Editar Tipos' : 'Asignar Tipo'}
-                </Button>
+                    </Button>
             </div>
         </ListGroup.Item>
     );

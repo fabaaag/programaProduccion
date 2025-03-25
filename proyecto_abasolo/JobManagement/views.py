@@ -1353,22 +1353,16 @@ class ProgramDetailView(APIView):
 
     def generate_timeline_data(self, programa, ordenes_trabajo):
         groups = []
-        items = []         
-            
-        fecha_inicio_programa = programa.fecha_inicio
-        current_date = fecha_inicio_programa
-
-        # Verificar si hay procesos con estándar en 0
+        items = []
         hay_estandar_cero = False
 
         for ot_data in ordenes_trabajo:
             try:
-                # Aquí está el cambio principal: trabajamos con el diccionario, no con un objeto
                 ot_id = ot_data['orden_trabajo']
                 ot_codigo = ot_data['orden_trabajo_codigo_ot']
                 ot_descripcion = ot_data['orden_trabajo_descripcion_producto_ot']
                 procesos = ot_data.get('procesos', [])
-                
+
                 if not procesos:
                     continue
 
@@ -1379,7 +1373,6 @@ class ProgramDetailView(APIView):
                     "procesos": []
                 }
 
-                # Usar la fecha de inicio del programa como fallback
                 fecha_inicio = ot_data.get('fecha_emision') or ot_data.get('fecha_proc') or programa.fecha_inicio
                 next_available_start = datetime.combine(fecha_inicio, time(7, 45))
 
@@ -1391,33 +1384,27 @@ class ProgramDetailView(APIView):
                         "item": proceso.get('item', 0)
                     })
 
-                    # Usar el estándar existente o el valor por defecto
                     estandar = float(proceso.get('estandar', 0))
                     if estandar <= 0:
                         hay_estandar_cero = True
                         continue
 
                     cantidad = float(proceso.get('cantidad', 0))
-
                     if cantidad <= 0:
                         continue
 
-                    # Calcular intervalos de trabajo
+                    # Calcular intervalos considerando asignaciones existentes
                     dates_data = self.calculate_working_days(
                         fecha_inicio,
                         cantidad,
                         estandar
                     )
 
-                    # Crear items del timeline para cada intervalo
                     for idx, interval in enumerate(dates_data['intervals']):
-                        #Formatear horas para el titulo
-                        start_hour = interval['fecha_inicio'].strftime('%H:%M')
-                        end_hour = interval['fecha_fin'].strftime('%H')
                         timeline_item = {
                             "id": f'item_{proceso["id"]}_{idx}',
                             "ot_id": f"ot_{ot_id}",
-                        "proceso_id": proceso_id,
+                            "proceso_id": proceso_id,
                             "name": f"{proceso.get('descripcion', 'Proceso')} - {interval['unidades']:.0f} de {cantidad:.0f} unidades",
                             "start_time": interval['fecha_inicio'].strftime('%Y-%m-%d %H:%M:%S'),
                             "end_time": interval['fecha_fin'].strftime('%Y-%m-%d %H:%M:%S'),
@@ -1426,8 +1413,7 @@ class ProgramDetailView(APIView):
                             "unidades_restantes": float(interval['unidades_restantes']),
                             "estandar": estandar
                         }
-                        
-                        # Bloque para asignaciones de operadores
+
                         try:
                             asignacion = AsignacionOperador.objects.filter(
                                 programa=programa,
@@ -1436,7 +1422,6 @@ class ProgramDetailView(APIView):
                                 fecha_fin__gte=interval['fecha_fin'],
                             ).select_related('operador').first()
 
-                            # Agregar información de asignación al item
                             timeline_item.update({
                                 "asignacion_id": asignacion.id if asignacion else None,
                                 "operador_id": asignacion.operador.id if asignacion else None,
@@ -1454,28 +1439,22 @@ class ProgramDetailView(APIView):
 
                         items.append(timeline_item)
 
-                        # Actualizar fecha de inicio para el siguiente proceso
                         if dates_data['intervals'][-1].get('continue_same_day', False):
                             fecha_inicio = dates_data['next_available_time']
                         else:
                             fecha_inicio = dates_data['next_available_time']
-                if ot_group["procesos"]:  # Solo agregar grupo si tiene procesos
+
+                if ot_group["procesos"]:
                     groups.append(ot_group)
-            
+
             except Exception as e:
                 print(f"Error generando timeline para OT: {str(e)}")
                 continue
 
-        if hay_estandar_cero:
-            return {
-                "groups": groups,
-                "items": items,
-                "error": "Hay procesos con estándar 0. Por favor, corrija los valores antes de proyectar."
-            }
-
         return {
             "groups": groups,
-            "items": items
+            "items": items,
+            "error": "Hay procesos con estándar 0. Por favor, corrija los valores antes de proyectar." if hay_estandar_cero else None
         }
     
     def calculate_working_days(self, start_date, cantidad, estandar):
@@ -1506,10 +1485,8 @@ class ProgramDetailView(APIView):
         BREAK_START = time(13, 0)
         BREAK_END = time(14, 0)
         
-        # Calcular estándar por hora (9 horas laborables efectivas)
-        WORK_HOURS = 9  # Total de horas menos la hora de descanso
-        estandar_hora = estandar / WORK_HOURS
-
+        # El estándar ya tiene valor hora
+        estandar_hora = float(estandar) 
         # Si la fecha inicial no es día laboral, mover al siguiente dia laboral
         if not is_working_day(current_date):
             next_day = get_next_working_day(current_date)
