@@ -17,6 +17,7 @@ import { OperatorManagementPage } from './components/Operator/OperatorManagement
 import { ProgramaOperadores } from './components/Operator/ProgramaOperadores';
 import { MachineList } from './components/Machine/MachineList';
 import { DiagnosticoMaquinas } from './components/Machine/DiagnosticoMaquinas';
+import { ReporteSupervisor } from './pages/programs/ReporteSupervisor';
 
 function App() {
   return (
@@ -119,6 +120,11 @@ function App() {
         <Route path="/machines-diagnostico" element={
           <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
             <DiagnosticoMaquinas/>
+          </ProtectedRoute>
+        }/>
+        <Route path="/programs/:programId/supervisor-report" element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
+            <ReporteSupervisor/>
           </ProtectedRoute>
         }/>
       </Routes>

@@ -1314,48 +1314,69 @@ class ProgramDetailView(APIView):
             #Obtener y validar objetos relacionados
             try:
                 operador = Operador.objects.get(id=data['operador_id'])
-                item_ruta = ItemRuta.objects.get(id=data['item_ruta_id'])
+                item_ruta = ItemRuta.objects.select_related(
+                    'proceso',
+                    'maquina',
+                    'ruta'
+                ).get(id=data['item_ruta_id'])
+
+                # Verificar si ya existe una asignación para este item_ruta en este programa
+                existing_assignment = AsignacionOperador.objects.filter(
+                    programa=programa,
+                    item_ruta=item_ruta
+                ).first()
+
+                if existing_assignment:
+                    # Si existe, actualizarla
+                    existing_assignment.operador = operador
+                    existing_assignment.fecha_inicio = parse_datetime(data['fecha_inicio'])
+                    existing_assignment.fecha_fin = parse_datetime(data['fecha_fin'])
+                    existing_assignment.save()
+                    asignacion = existing_assignment
+                else:
+                    # Si no existe, crear una nueva
+                    asignacion = AsignacionOperador(
+                        operador=operador,
+                        item_ruta=item_ruta,
+                        programa=programa,
+                        fecha_inicio=parse_datetime(data['fecha_inicio']),
+                        fecha_fin=parse_datetime(data['fecha_fin'])
+                    )
+                    asignacion.full_clean()
+                    asignacion.save()
+
+                # Recalcular asignaciones posteriores
+                asignacion.recalcular_asignaciones_posteriores()
+
+                return Response({
+                    'message': 'Asignación creada exitosamente',
+                    'id': asignacion.id,
+                }, status=status.HTTP_201_CREATED)
+
             except (Operador.DoesNotExist, ItemRuta.DoesNotExist) as e:
                 return Response(
-                    {'error': f'Objeto no encontrado {str(e)}'},
+                    {'error': f'Objeto no encontrado: {str(e)}'},
                     status=status.HTTP_404_NOT_FOUND
                 )
-
-            #Crear asignación
-            asignacion = AsignacionOperador(
-                operador=operador,
-                item_ruta=item_ruta,
-                programa=programa,
-                fecha_inicio=data['fecha_inicio'],
-                fecha_fin=data['fecha_fin']
-            )
-
-            #Validar la asignación
-            try:
-                asignacion.full_clean()
             except ValidationError as e:
                 return Response(
-                    {'error': str(e)},
+                    {'error': f'Error de validación: {str(e)}'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            asignacion.save()
-
-            return Response({
-                'message': 'Asignación creada exitosamente',
-                'id': asignacion.id,
-            }, status=status.HTTP_201_CREATED)
+            
         except Exception as e:
-            print(f"Error al crear asignación: {str(e)}")  # Debug log
+            print(f"Error al procesar la asignación: {str(e)}")
             return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': f'Error al procesar la asignación: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     def generate_timeline_data(self, programa, ordenes_trabajo):
         groups = []
         items = []
         hay_estandar_cero = False
-
+        operador_timeline = {}  # Para rastrear el último uso de cada operador
+        
         for ot_data in ordenes_trabajo:
             try:
                 ot_id = ot_data['orden_trabajo']
@@ -1393,13 +1414,27 @@ class ProgramDetailView(APIView):
                     if cantidad <= 0:
                         continue
 
-                    # Calcular intervalos considerando asignaciones existentes
+                    # Verificar si el proceso tiene una asignación existente
+                    asignacion = proceso.get('asignacion')
+                    if asignacion:
+                        operador_id = asignacion.get('operador_id')
+                        # Ajustar fecha de inicio basada en la última asignación del operador
+                        if operador_id in operador_timeline:
+                            ultima_fecha = operador_timeline[operador_id]
+                            next_available_start = max(next_available_start, ultima_fecha)
+                            
+                            # Si la nueva fecha de inicio cae en horario de almuerzo, ajustar
+                            if time(13, 0) <= next_available_start.time() < time(14, 0):
+                                next_available_start = datetime.combine(next_available_start.date(), time(14, 0))
+
+                    # Calcular intervalos considerando el next_available_start
                     dates_data = self.calculate_working_days(
-                        fecha_inicio,
+                        next_available_start,
                         cantidad,
                         estandar
                     )
 
+                    # Crear items para cada intervalo
                     for idx, interval in enumerate(dates_data['intervals']):
                         timeline_item = {
                             "id": f'item_{proceso["id"]}_{idx}',
@@ -1414,22 +1449,17 @@ class ProgramDetailView(APIView):
                             "estandar": estandar
                         }
 
-                        try:
-                            asignacion = AsignacionOperador.objects.filter(
-                                programa=programa,
-                                item_ruta_id=proceso['id'],
-                                fecha_inicio__lte=interval['fecha_inicio'],
-                                fecha_fin__gte=interval['fecha_fin'],
-                            ).select_related('operador').first()
-
+                        # Agregar información de asignación
+                        if asignacion:
                             timeline_item.update({
-                                "asignacion_id": asignacion.id if asignacion else None,
-                                "operador_id": asignacion.operador.id if asignacion else None,
-                                "operador_nombre": asignacion.operador.nombre if asignacion else None,
-                                "asignado": bool(asignacion)
+                                "asignacion_id": asignacion.get('id'),
+                                "operador_id": asignacion.get('operador_id'),
+                                "operador_nombre": asignacion.get('operador_nombre'),
+                                "asignado": True
                             })
-                        except Exception as e:
-                            print(f"Error al obtener asignacion: {str(e)}")
+                            # Actualizar el timeline del operador
+                            operador_timeline[asignacion.get('operador_id')] = interval['fecha_fin']
+                        else:
                             timeline_item.update({
                                 "asignacion_id": None,
                                 "operador_id": None,
@@ -1439,16 +1469,14 @@ class ProgramDetailView(APIView):
 
                         items.append(timeline_item)
 
-                        if dates_data['intervals'][-1].get('continue_same_day', False):
-                            fecha_inicio = dates_data['next_available_time']
-                        else:
-                            fecha_inicio = dates_data['next_available_time']
+                    # Actualizar fecha de inicio para el siguiente proceso
+                    next_available_start = dates_data['next_available_time']
 
                 if ot_group["procesos"]:
                     groups.append(ot_group)
 
             except Exception as e:
-                print(f"Error generando timeline para OT: {str(e)}")
+                print(f"Error generando timeline para OT {ot_id}: {str(e)}")
                 continue
 
         return {

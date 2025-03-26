@@ -13,6 +13,7 @@ import { toast } from "react-hot-toast";
 import moment from "moment";
 import { OperadorSelectionModal } from '../../components/Programa/OperadorSelectionModal';
 import { LoadingSpinner } from "../../components/UI/LoadingSpinner/LoadingSpinner";
+import "./ProgramDetail.css";
 
 export function ProgramDetail() {
     const { programId } = useParams();
@@ -332,105 +333,83 @@ export function ProgramDetail() {
             const response = await getProgram(programId);
             console.log("Datos recibidos del backend:", response.data);
             
-
-            console.log("=== DATOS DEL PROGRAMA RECIBIDOS ===");
-            console.log("Programa:", response);
-
-            // Actualizar los datos generales del programa
             setProgramData(response.program || {});
-
+            
             // Procesar las órdenes de trabajo y sus asignaciones
             const ordenesTrabajo = response.ordenes_trabajo || [];
-            setOtList(ordenesTrabajo.map(ot => ({
-                ...ot,
-                procesos: ot.procesos.map(proceso => ({
-                    ...proceso,
-                    //Agregar información de asignación si existe
-                    operador_id: proceso.asignacion?.operador_id || null,
-                    operador_nombre: proceso.asignacion?.operador_nombre || null,
-                    fecha_inicio: proceso.asignacion?.fecha_inicio || null,
-                    fecha_fin: proceso.asignacion?.fecha_fin || null,
-                }))
-            })));
+            setOtList(ordenesTrabajo);
 
             // Validar y procesar los datos del timeline
             if (response.routes_data && typeof response.routes_data === "object") {
-                console.log("=== DATOS DE RUTAS RECIBIDOS ===");
-                console.log("Grupos:", response.routes_data.groups);
-                console.log("Items:", response.routes_data.items);
                 const { groups, items } = response.routes_data;
 
-                // Validar grupos y convertirlos si están disponibles
+                // Procesar grupos y subgrupos
                 if (Array.isArray(groups)) {
-                    const processedGroups = groups.map(ot => ({
-                        id: ot.id,
-                        title: ot.orden_trabajo_codigo_ot || "OT Sin código",
-                        stackItems: false,
-                        height: 70,
-                        subgroups: ot.procesos?.map(proceso =>({
+                    const flatGroups = groups.flatMap(ot => {
+                        // Grupo principal (OT)
+                        const mainGroup = {
+                            id: ot.id,
+                            title: ot.orden_trabajo_codigo_ot || "OT Sin código",
+                            stackItems: true,
+                            height: 70
+                        };
+
+                        // Subgrupos (procesos)
+                        const processGroups = ot.procesos?.map(proceso => ({
                             id: `${ot.id}-${proceso.id}`,
-                            title: proceso.descripcion,
-                            parent:ot.id,
+                            title: proceso.descripcion || "Sin descripción",
                             height: 50,
-                        })) || []
-                    }));
+                            parent: ot.id
+                        })) || [];
 
-                    //Aplanar la estructura para el Timeline
-                    const flatGroups = processedGroups.reduce((acc, group)=>{
-                        acc.push({
-                            id: group.id,
-                            title: group.title,
-                            height: group.height,
-                            stackItems: true
-                        });
-                        group.subgroups.forEach(subgroup => {
-                            acc.push({
-                                id: subgroup.id,
-                                title: subgroup.title,
-                                parent: subgroup.parent,
-                                height: subgroup.height
-                            });
-                        });
-                        return acc;
-                    }, []);
+                        return [mainGroup, ...processGroups];
+                    });
+
                     setTimelineGroups(flatGroups);
-                } 
+                }
 
-                // Procesar elementos de rutas
+                // Procesar items del timeline
                 if (Array.isArray(items)) {
-                    const timelineItems = items.map((item) => ({
-                        id: item.id,
-                        group: `${item.ot_id}-${item.proceso_id}`,
-                        title: `${item.name}${item.operador_nombre ? ` - Op: ${item.operador_nombre}` : ''}`,
-                        start_time: new Date(item.start || item.start_time),
-                        end_time: new Date(item.end || item.end_time),
-                        itemProps: {
-                            style: {
-                                backgroundColor: item.asignado ? "#4CAF50" : 
-                                               new Date(item.end || item.end_time) < new Date() ? "#ff4444" : 
-                                               "#FFA726",
-                                color: 'white',
-                                borderRadius: '4px',
-                                padding: '2px',
-                                marginBottom: '10px',    
+                    const timelineItems = items.map((item) => {
+                        // Determinar el color basado en el estado y asignación
+                        let backgroundColor;
+                        if (item.asignado) {
+                            backgroundColor = "#4CAF50"; // Verde si tiene asignación
+                        } else if (new Date(item.end_time) < new Date()) {
+                            backgroundColor = "#ff4444"; // Rojo si está vencido
+                        } else {
+                            backgroundColor = "#FFA726"; // Naranja por defecto
+                        }
+
+                        return {
+                            id: item.id,
+                            group: `${item.ot_id}-${item.proceso_id}`,
+                            title: `${item.name}${item.operador_nombre ? ` - Op: ${item.operador_nombre}` : ''}`,
+                            start_time: new Date(item.start_time),
+                            end_time: new Date(item.end_time),
+                            itemProps: {
+                                style: {
+                                    backgroundColor,
+                                    color: 'white',
+                                    borderRadius: '4px',
+                                    padding: '2px 6px',
+                                    fontSize: '12px'
+                                },
+                                'data-tooltip': `
+                                    ${item.name}
+                                    Cantidad: ${item.cantidad_intervalo} de ${item.cantidad_total}
+                                    ${item.operador_nombre ? `Operador: ${item.operador_nombre}` : 'Sin operador asignado'}
+                                    Estándar: ${item.estandar} u/hr
+                                    Inicio: ${new Date(item.start_time).toLocaleString()}
+                                    Fin: ${new Date(item.end_time).toLocaleString()}
+                                `
                             },
-                            'data-tooltip': `
-                                ${item.name}
-                                Cantidad: ${item.cantidad_intervalo} de ${item.cantidad_total}
-                                ${item.operador_nombre ? `Operador: ${item.operador_nombre}` : 'Sin operador asignado'}
-                                Estándar: ${item.estandar} u/hr
-                            `
-                        },
-                        canMove: false,  // Cambiado a false para mantener consistencia
-                        canResize: false,
-                    }));
+                            canMove: false,
+                            canResize: false
+                        };
+                    });
                     setTimelineItems(timelineItems);
                 }
-            }
-
-            //Procesar las asignaciones si existen
-            if(response.ordenes_trabajo){
-                console.log("OT con asignaciones:", response.ordenes_trabajo);
             }
         } catch (error) {
             console.error("Error al cargar detalles del programa:", error);
@@ -1006,8 +985,15 @@ export function ProgramDetail() {
                             }
                         }
                     }} 
-                    className="mt-3">
+                    className="mt-3 me-2">
                         Generar PDF
+                    </Button>
+                    {/* Nuevo botón para Reporte Supervisor */}
+                    <Button 
+                        variant="info" 
+                        onClick={() => navigate(`/programs/${programId}/supervisor-report`)}
+                        className="mt-3">
+                        Reporte Supervisor
                     </Button>
                 </section>
 
@@ -1019,11 +1005,9 @@ export function ProgramDetail() {
                             defaultTimeStart={moment().startOf('day').toDate()}
                             defaultTimeEnd={moment().add(14, 'days').toDate()}
                             lineHeight={50}
-                            // No cambiar stackItems si ya funciona
                             sidebarWidth={200}
                             canMove={false}
                             canResize={false}
-                            // Configuración para mostrar horas
                             timeSteps={{
                                 second: 1,
                                 minute: 30,
@@ -1032,20 +1016,33 @@ export function ProgramDetail() {
                                 month: 1,
                                 year: 1
                             }}
-                            // Mostrar las horas en el encabezado
                             traditionalZoom={true}
-                            // Formato de hora
                             timeFormat="%H:%M"
-                            // Mostrar líneas de hora
                             showCursorLine
-                            // Marcar la hora de descanso con un color diferente
+                            itemRenderer={({ item, itemContext, getItemProps }) => {
+                                const { left: leftResizer, right: rightResizer } = itemContext.dimensions;
+                                return (
+                                    <div
+                                        {...getItemProps({
+                                            style: {
+                                                ...item.itemProps.style,
+                                                left: leftResizer,
+                                                width: rightResizer - leftResizer,
+                                                position: 'absolute',
+                                                height: '100%'
+                                            }
+                                        })}
+                                        title={item.itemProps['data-tooltip']}
+                                    >
+                                        <div className="timeline-item-content">
+                                            {item.title}
+                                        </div>
+                                    </div>
+                                );
+                            }}
                             dayBackground={date => {
                                 const hours = date.getHours();
-                                // Marcar la hora de descanso (13:00-14:00) con un color diferente
-                                if (hours === 13) {
-                                    return '#f8d7da';  // Color rojo claro
-                                }
-                                return null;
+                                return hours === 13 ? '#f8d7da' : null;
                             }}
                         />
                     </div>

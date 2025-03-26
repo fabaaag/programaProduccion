@@ -175,7 +175,7 @@ function AsignacionModal({ show, onHide, maquina, onAsignacionCompleta }) {
                                 ))}
                             </div>
                         </div>
-                    )}
+                        )}
 
                     {/* Preview de Procesos Compatibles */}
                     {preview.length > 0 && (

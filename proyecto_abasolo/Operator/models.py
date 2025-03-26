@@ -147,8 +147,8 @@ class AsignacionOperador(models.Model):
             
             # Verificar disponibilidad del operador y la máquina
             superposicion = AsignacionOperador.objects.filter(
-                Q(operador=operador, fecha_inicio__lt=fecha_fin_propuesta, fecha_fin__gt=fecha_propuesta) |
-                Q(item_ruta__maquina=maquina, fecha_inicio__lt=fecha_fin_propuesta, fecha_fin__gt=fecha_propuesta)
+            Q(operador=operador, fecha_inicio__lt=fecha_fin_propuesta, fecha_fin__gt=fecha_propuesta) |
+            Q(item_ruta__maquina=maquina, fecha_inicio__lt=fecha_fin_propuesta, fecha_fin__gt=fecha_propuesta)
             ).order_by('fecha_fin')
 
             if not superposicion.exists():
@@ -169,9 +169,74 @@ class AsignacionOperador(models.Model):
             if fecha_propuesta.hour >= 18:
                 fecha_propuesta = (fecha_propuesta + timedelta(days=1)).replace(hour=8, minute=0)
 
+    def recalcular_asignaciones_posteriores(self):
+        """Recalcula las fechas de las asignaciones posteriores cuando se modifica una asignacion"""
+        # Obtener todas las asignaciones posteriores del mismo operador, ordenadas por prioridad de OT
+        asignaciones_posteriores = AsignacionOperador.objects.filter(
+            operador=self.operador,
+            fecha_inicio__gt=self.fecha_inicio
+        ).select_related(
+            'item_ruta__orden_trabajo',
+            'programa'
+        ).order_by(
+            'item_ruta__orden_trabajo__prioridad',
+            'item_ruta__item'
+        )
+
+        fecha_anterior = self.fecha_fin
+        for asignacion in asignaciones_posteriores:
+            # Calcular la duración original de la asignacion
+            duracion = asignacion.fecha_fin - asignacion.fecha_inicio
+            
+            # Encontrar el siguiente horario disponible
+            nueva_fecha_inicio = self.encontrar_siguiente_horario_disponible(
+                asignacion.operador,
+                asignacion.item_ruta.maquina,
+                fecha_anterior,
+                duracion.total_seconds() / 3600
+            )
+
+            # Actualizar las fechas
+            asignacion.fecha_inicio = nueva_fecha_inicio
+            asignacion.fecha_fin = nueva_fecha_inicio + duracion
+            asignacion.save()
+
+            # Recalcular los procesos subsiguientes de la misma OT
+            self.recalcular_procesos_subsiguientes(asignacion)
+
+            fecha_anterior = asignacion.fecha_fin
+
+    def recalcular_procesos_subsiguientes(self, asignacion):
+        """Recalcula las fechas de los procesos que siguen después del proceso actual en la misma OT"""
+        procesos_siguientes = ItemRuta.objects.filter(
+            orden_trabajo=asignacion.item_ruta.orden_trabajo,
+            item__gt=asignacion.item_ruta.item
+        ).order_by('item')
+
+        fecha_inicio = asignacion.fecha_fin
+        for proceso in procesos_siguientes:
+            # Buscar si el proceso tiene una asignación
+            try:
+                asig_proceso = AsignacionOperador.objects.get(
+                    item_ruta=proceso,
+                    programa=asignacion.programa
+                )
+                # Actualizar las fechas de la asignación
+                asig_proceso.fecha_inicio = fecha_inicio
+                asig_proceso.fecha_fin = fecha_inicio + (asig_proceso.fecha_fin - asig_proceso.fecha_inicio)
+                asig_proceso.save()
+                fecha_inicio = asig_proceso.fecha_fin
+            except AsignacionOperador.DoesNotExist:
+                continue
+
     def save(self, *args, **kwargs):
+        is_new = self._state.adding
         self.clean()
         super().save(*args, **kwargs)
+
+        #Solo recalcular si es una nueva asignacion o si las fechas cambiaron
+        if is_new or self.has_changed:
+            self.recalcular_asignaciones_posteriores()
 
     def __str__(self):
         return f"{self.operador.nombre} - {self.item_ruta} ({self.fecha_inicio})"
