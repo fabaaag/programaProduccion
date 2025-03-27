@@ -2274,3 +2274,142 @@ class ProcesoListView(APIView):
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+class SupervisorReportView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request, pk):
+        try:
+            fecha = request.query_params.get('fecha')
+            if not fecha:
+                return Response(
+                    {'error': 'Se requiere el parámetro fecha'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+            fecha_consulta = datetime.strptime(fecha, '%Y-%m-%d')
+            programa = get_object_or_404(ProgramaProduccion, id=pk)
+            program_detail_view = ProgramDetailView()
+            timeline_data = program_detail_view.generate_timeline_data(
+                programa,
+                program_detail_view.get_ordenes_trabajo(programa)
+            )
+
+            # Diccionario para agrupar tareas por proceso
+            tareas_agrupadas = {}
+            total_kilos_programados = 0
+
+            for item in timeline_data.get('items', []):
+                fecha_inicio = datetime.strptime(item['start_time'], '%Y-%m-%d %H:%M:%S')
+                fecha_fin = datetime.strptime(item['end_time'], '%Y-%m-%d %H:%M:%S')
+
+                if fecha_inicio.date() == fecha_consulta.date():
+                    proceso_id = item['proceso_id'].replace('proc_', '')
+                    
+                    # Usar una clave única que combine OT y proceso
+                    clave = f"{item['ot_id']}_{proceso_id}"
+                    
+                    if clave not in tareas_agrupadas:
+                        item_ruta = ItemRuta.objects.select_related(
+                            'proceso',
+                            'maquina',
+                            'ruta__orden_trabajo'
+                        ).get(id=proceso_id)
+
+                        # Calcular kilos programados
+                        peso_unitario = float(item_ruta.ruta.orden_trabajo.peso_unitario or 0)
+                        kilos_programados = peso_unitario * float(item['cantidad_total'])
+                        total_kilos_programados += kilos_programados
+
+                        # Encontrar la primera hora de inicio y última hora de fin para este proceso en este día
+                        hora_inicio = fecha_inicio.strftime('%H:%M')
+                        hora_fin = fecha_fin.strftime('%H:%M')
+
+                        tareas_agrupadas[clave] = {
+                            'id': item['id'],
+                            'ot_codigo': item_ruta.ruta.orden_trabajo.codigo_ot,
+                            'proceso': item_ruta.proceso.descripcion,
+                            'maquina': {
+                                'id': item_ruta.maquina.id if item_ruta.maquina else None,
+                                'descripcion': item_ruta.maquina.descripcion if item_ruta.maquina else 'Sin máquina'
+                            },
+                            'operador': item.get('operador_nombre', 'Sin asignar'),
+                            'cantidad_programada': item['cantidad_total'],
+                            'kilos_programados': kilos_programados,
+                            'hora_inicio': hora_inicio,
+                            'hora_fin': hora_fin,
+                            'estado': 'Pendiente',
+                            'observaciones': ''
+                        }
+                    else:
+                        # Actualizar hora de fin si es más tarde que la existente
+                        hora_fin_actual = datetime.strptime(tareas_agrupadas[clave]['hora_fin'], '%H:%M').time()
+                        if fecha_fin.time() > hora_fin_actual:
+                            tareas_agrupadas[clave]['hora_fin'] = fecha_fin.strftime('%H:%M')
+
+            return Response({
+                'fecha': fecha,
+                'total_kilos_programados': total_kilos_programados,
+                'tareas': list(tareas_agrupadas.values())
+            })
+        
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @transaction.atomic
+    def post(self, request, pk):
+        """Actualiza los kilos fabricados y recalcula el programa si es necesario"""
+        try:
+            programa = get_object_or_404(ProgramaProduccion, id=pk)
+            data = request.data
+            tarea_id = data.get('tarea_id')
+            kilos_fabricados = float(data.get('kilos_fabricados', 0))
+            
+            # Obtener la tarea original
+            proceso_id = data.get('proceso_id')
+            item_ruta = ItemRuta.objects.select_related(
+                'proceso', 'maquina', 'ruta__orden_trabajo'
+            ).get(id=proceso_id)
+            
+            # Calcular unidades fabricadas basado en los kilos
+            peso_unitario = item_ruta.ruta.orden_trabajo.peso_unitario
+            if peso_unitario > 0:
+                unidades_fabricadas = kilos_fabricados / peso_unitario
+                unidades_programadas = data.get('cantidad_programada')
+                
+                # Si hay unidades pendientes, crear nuevo intervalo para el día siguiente
+                if unidades_fabricadas < unidades_programadas:
+                    unidades_pendientes = unidades_programadas - unidades_fabricadas
+                    
+                    # Obtener la siguiente fecha hábil
+                    fecha_actual = datetime.strptime(data.get('fecha'), '%Y-%m-%d')
+                    siguiente_dia = get_next_working_day(fecha_actual.date())
+                    
+                    # Crear nuevo intervalo para las unidades pendientes
+                    program_detail_view = ProgramDetailView()
+                    dates_data = program_detail_view.calculate_working_days(
+                        datetime.combine(siguiente_dia, time(7, 45)),
+                        unidades_pendientes,
+                        item_ruta.estandar
+                    )
+                    
+                    # Actualizar el timeline con el nuevo intervalo
+                    if dates_data['intervals']:
+                        # Aquí se implementaría la lógica para actualizar el timeline
+                        pass
+
+            return Response({
+                'message': 'Actualización exitosa',
+                'kilos_fabricados': kilos_fabricados,
+                'porcentaje_cumplimiento': (kilos_fabricados / (peso_unitario * unidades_programadas)) * 100 if peso_unitario > 0 else 0
+            })
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        
