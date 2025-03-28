@@ -35,3 +35,20 @@
     width: max-content;
     max-width: 300px;
 }
+
+/* Estilos para el layout principal */
+.page-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.content-wrapper {
+    flex: 1 0 auto;
+    padding: 2rem 0;
+}
+
+/* Asegurar que el footer se mantenga abajo */
+.footer {
+    flex-shrink: 0;
+}

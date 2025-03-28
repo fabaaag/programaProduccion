@@ -1,31 +1,26 @@
 import React from 'react';
-import { Container, Row, Col, Stack, Image, Nav, NavLink} from 'react-bootstrap';
-import logavsa from './img/logavsa.png'
-
+import { Container, Row, Col } from 'react-bootstrap';
+import logavsa from './img/logavsa.png';
+import './Footer.css';
 
 export function Footer() {
-  return (
-    <div>
-        <footer>
+    return (
+        <footer className="footer">
             <Container fluid>
-                <Row className="bg-dark text-white p-4">
-                    <Col className="mx-5">
-                        <Stack>
-                            <Image src={logavsa} alt='company logo' rounded width={150} height={150}/>
-                            <h2>Abasolo Vallejo</h2>
-                            
-                        </Stack>
+                <Row className="footer-content align-items-center">
+                    <Col xs={12} md={6} className="text-center text-md-start">
+                        <img src={logavsa} alt='logo' className="footer-logo" />
+                        <span className="company-name">Abasolo Vallejo</span>
                     </Col>
-                    <Col>
-                        
-                    </Col>
-                    <Col>
-                        
+                    <Col xs={12} md={6} className="text-center text-md-end">
+                        <p className="version-info">Versión 1.0.0</p>
+                        <p className="copyright">
+                            © {new Date().getFullYear()} Abasolo Vallejo - Uso Interno
+                        </p>
                     </Col>
                 </Row>
             </Container>
         </footer>
-    </div>
-  )
+    );
 }
 

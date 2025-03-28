@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
 from .models import CustomUser
 
 class UserSerializer(serializers.ModelSerializer):
@@ -44,31 +45,53 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    current_password = serializers.CharField(write_only=True, required=False)
+    new_password = serializers.CharField(write_only=True, required=False)
+
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'telefono', 'cargo', 'rol']
-        read_only_fields = ['id', 'username', 'rol']
+        fields = ('first_name', 'last_name', 'email', 'telefono', 'cargo', 'current_password', 'new_password')
+        extra_kwargs = {
+            'first_name': {'required': False},
+            'last_name': {'required': False},
+            'email': {'required': False},
+            'telefono': {'required': False},
+            'cargo': {'required': False}
+        }
 
-    def to_representation(self, instance):
-        """
-        Personaliza la representación de los datos que se envían al frontend
-        """
-        data = super().to_representation(instance)
-        # Agregar campos adicionales o transformar datos si es necesario
-        if instance.rol:
-            data['rol'] = instance.get_rol_display()
+    def validate(self, data):
+        # Si se proporciona new_password, current_password es requerido
+        if 'new_password' in data and not data.get('current_password'):
+            raise serializers.ValidationError(
+                {'current_password': 'La contraseña actual es requerida para cambiar la contraseña'}
+            )
+
+        # Validar la contraseña actual si se está intentando cambiar la contraseña
+        if 'new_password' in data and 'current_password' in data:
+            if not self.instance.check_password(data['current_password']):
+                raise serializers.ValidationError(
+                    {'current_password': 'La contraseña actual es incorrecta'}
+                )
+            
+            # Validar la nueva contraseña
+            try:
+                validate_password(data['new_password'], self.instance)
+            except Exception as e:
+                raise serializers.ValidationError({'new_password': list(e)})
+
         return data
 
     def update(self, instance, validated_data):
-        """
-        Actualiza los datos del usuario
-        """
-        # Actualizar solo los campos permitidos
-        instance.first_name = validated_data.get('first_name', instance.first_name)
-        instance.last_name = validated_data.get('last_name', instance.last_name)
-        instance.email = validated_data.get('email', instance.email)
-        instance.telefono = validated_data.get('telefono', instance.telefono)
-        instance.cargo = validated_data.get('cargo', instance.cargo)
+        # Manejar el cambio de contraseña
+        if 'new_password' in validated_data:
+            instance.set_password(validated_data['new_password'])
+            # Eliminar las contraseñas del validated_data para que no se guarden en los campos normales
+            validated_data.pop('new_password', None)
+            validated_data.pop('current_password', None)
+
+        # Actualizar los demás campos
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         
         instance.save()
         return instance

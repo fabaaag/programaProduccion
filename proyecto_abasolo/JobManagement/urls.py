@@ -34,3 +34,7 @@ urlpatterns += [
     path('api/v1/empresas/', views.EmpresaListView.as_view(), name='empresas-get-list'),
     path('api/v1/programas/<int:pk>/asignaciones/', views.ProgramDetailView.as_view(), name='asignaciones-programa')
 ]
+
+urlpatterns += [
+    path('api/v1/ordenes/search/', views.search_orders, name='search-orders'),
+]

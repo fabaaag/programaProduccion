@@ -1,10 +1,20 @@
 .loader-container {
     display: flex;
-    flex-direction: column;
     justify-content: center;
     align-items: center;
-    height: 80vh;
-    width:100%;
+    width: 100%;
+    background-color: rgba(255, 255, 255, 0.9);
+    z-index: 1000;
+}
+
+.loader-container.content-loader {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
 }
 
 .loader-container.overlay {
@@ -13,92 +23,112 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(255, 255, 255, 0.7);
-    z-index: 1000;
     height: 100vh;
 }
 
-.pulse-loader {
+.loader-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* Nuevo contenedor para el spinner */
+.spinner-container {
     position: relative;
-    width: 120px;
-    height: 60px;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
-.small-loader .pulse-loader {
-    width: 60px;
-    height: 30px;
-    margin: 10px;
+/* Estilos para el círculo de progreso */
+.progress-ring__circle-bg {
+    stroke-opacity: 0.2;
 }
 
-.pulse-bubble {
+.progress-ring__circle {
+    transform-origin: center;
+    transform: rotate(-90deg);
+    stroke-dasharray: 213.628; /* 2 * π * r */
+    stroke-dashoffset: 213.628;
+    animation: progress-ring 2s linear infinite;
+}
+
+/* Contenedor del icono */
+.icon-container {
     position: absolute;
-    top: 30px;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background-color: #3498db;
-    animation: pulse 1.5s infinite ease-in-out;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
 }
 
-.small-loader .pulse-bubble {
-    width: 10px;
-    height: 10px;
-    top: 15px;
+/* Estilos para el icono */
+.spinning-icon {
+    width: 30px;
+    height: 30px;
+    color: #004b93;
 }
 
-.pulse-bubble-1 {
-    left: 0;
-    animation-delay: 0s;
-}
-
-.pulse-bubble-2 {
-    left: 40px;
-    animation-delay: 0.2s;
-}
-
-.small-loader .pulse-bubble-2 {
-    left: 20px;
-}
-
-.pulse-bubble-3 {
-    left: 80px;
-    animation-delay: 0.4s;
-}
-
-.small-loader .pulse-bubble-3 {
-    left: 40px
+/* Si usas el logo en lugar del icono */
+.spinning-icon.logo {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
 }
 
 .loading-text {
-    margin-top: 20px;
-    font-size: 1.2rem;
-    color: #6c757d;
+    margin-top: 1.5rem;
+    font-size: 1rem;
+    color: #2c3e50;
     font-weight: 500;
-    animation: fadeInOut 1.5s infinite ease-in-out;
+}
+
+/* Animación para el círculo de progreso */
+@keyframes progress-ring {
+    0% {
+        stroke-dashoffset: 213.628;
+    }
+    100% {
+        stroke-dashoffset: 0;
+    }
+}
+
+/* Ajustes para el tamaño pequeño */
+.small-loader .spinner-container {
+    width: 50px;
+    height: 50px;
+}
+
+.small-loader .progress-ring {
+    width: 50px;
+    height: 50px;
+}
+
+.small-loader .progress-ring__circle,
+.small-loader .progress-ring__circle-bg {
+    r: "21";
+    cx: "25";
+    cy: "25";
+}
+
+.small-loader .icon-container {
+    width: 25px;
+    height: 25px;
+}
+
+.small-loader .spinning-icon {
+    width: 20px;
+    height: 20px;
 }
 
 .small-loader .loading-text {
     font-size: 0.9rem;
-    margin-top: 10px;
-}
-
-@keyframes pulse {
-    0% {
-        transform: scale(0.8);
-        opacity: 0.5;
-    }
-    50% {
-        transform: scale(1.2);
-        opacity: 1;
-    }
-    100% {
-        transform: scale(0.8);
-        opacity: 0.5;
-    }
-}
-
-@keyframes fadeInOut {
-    0% { opacity: 0.7; }
-    50% { opacity: 1; }
-    100% { opacity: 0.7; }
+    margin-top: 1rem;
 }

@@ -2412,4 +2412,37 @@ class SupervisorReportView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
+@api_view(['GET'])
+def search_orders(request):
+    search_term = request.GET.get('search', '')
+    status = request.GET.get('status', 'all')
+    
+    queryset = OrdenTrabajo.objects.all()
+    
+    # Aplicar filtro de búsqueda
+    if search_term:
+        queryset = queryset.filter(
+            Q(codigo_ot__icontains=search_term) |
+            Q(descripcion_producto_ot__icontains=search_term) |
+            Q(cliente__nombre__icontains=search_term)
+        )
+    
+    # Aplicar filtro de estado
+    if status != 'all':
+        queryset = queryset.filter(situacion_ot__codigo_situacion_ot=status)
+    
+    # Incluir relaciones necesarias
+    queryset = queryset.select_related(
+        'tipo_ot',
+        'situacion_ot',
+        'cliente',
+        'materia_prima'
+    ).prefetch_related(
+        'ruta_ot__items__proceso',
+        'ruta_ot__items__maquina'
+    )
+    
+    serializer = OrdenTrabajoSerializer(queryset, many=True)
+    return Response(serializer.data)
+        
         

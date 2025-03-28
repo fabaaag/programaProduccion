@@ -51,3 +51,23 @@ export const updateMachineType = async (machineId, typeIds) => {
         throw error;
     }
 };
+
+export const getOperatorMachines = async (operatorId) => {
+    try {
+        const response = await axios.get(`/machine/api/v1/operator-machines/${operatorId}/`);
+        return response.data;
+    } catch (error) {
+        console.error('Error al obtener máquinas del operador:', error);
+        throw error;
+    }
+};
+
+export const getOperatorFormMachines = async () => {
+    try {
+        const response = await axios.get('/machine/api/v1/operator-form-machines/');
+        return response.data;
+    } catch (error) {
+        console.error('Error al obtener máquinas para el formulario:', error);
+        throw error;
+    }
+};

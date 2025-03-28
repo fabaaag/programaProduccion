@@ -3,7 +3,7 @@ import { createOrder, deleteOrder, updateOrder, getOrder } from "../../api/order
 import { replace, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
-import CompNavbar from "../../components/Navbar/compNavbar";
+import CompNavbar from "../../components/Navbar/CompNavbar";
 import TipoOTSelect from "../../components/Orders/TipoOTList";
 import SituacionOTSelect from "../../components/Orders/SituacionOTList";
 

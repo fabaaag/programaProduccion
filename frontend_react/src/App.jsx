@@ -61,7 +61,7 @@ function App() {
             <OrderPage/>
           </ProtectedRoute>
         }/>
-        <Route path='/orders-create' element={
+        <Route path='/orders/:id/orders-detail' element={
           <ProtectedRoute allowedRoles={['ADMIN', 'SUPERVISOR']}>
             <OrderFormPage/>
           </ProtectedRoute>

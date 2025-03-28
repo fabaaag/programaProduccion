@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Form, Button, Modal, Alert, Row, Col } from 'react-bootstrap';
 import { createOperator, updateOperator, deleteOperator } from '../../api/operator.api.js';
-import { getAllMachines } from '../../api/machines.api.js';
+import { getOperatorFormMachines } from '../../api/machines.api.js';
 import { getAllEmpresas } from '../../api/empresas.api.js';
 import { toast } from 'react-hot-toast';
+import { FaUser, FaIdCard, FaBuilding, FaCog, FaTrash, FaSave, FaTimes } from 'react-icons/fa';
+import './css/OperatorForm.css';
 
-export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSaved }){
+export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSaved }) {
     const [formData, setFormData] = useState({
         nombre: '',
         rut: '',
@@ -14,13 +16,11 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
         activo: true
     });
 
-
     const [machines, setMachines] = useState([]);
     const [empresas, setEmpresas] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
 
     useEffect(() => {
         loadInitialData();
@@ -43,7 +43,7 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
     const loadInitialData = async () => {
         try{
             const [machinesData, empresasData] = await Promise.all([
-                getAllMachines(),
+                getOperatorFormMachines(),
                 getAllEmpresas()
             ]);
             setMachines(machinesData);
@@ -166,133 +166,178 @@ export function OperatorForm({ show, handleClose, operatorToEdit, onOperatorSave
         }
     }
     return (
-        <Modal show={show} onHide={handleClose} backdrop="static" keyboard={false}>
+        <Modal show={show} onHide={handleClose} backdrop="static" keyboard={false} className="operator-form-modal">
             <Form onSubmit={handleSubmit}>
                 <Modal.Header closeButton>
-                    <Modal.Title>
+                    <Modal.Title className="modal-title">
+                        <FaUser className="title-icon" />
                         {operatorToEdit ? 'Editar Operador' : 'Nuevo Operador'}
                     </Modal.Title>
                 </Modal.Header>
                 <Modal.Body>
-                    {error && <Alert variant="danger">{error}</Alert>}
+                    {error && (
+                        <Alert variant="danger" className="error-alert">
+                            <i className="fas fa-exclamation-circle me-2"></i>
+                            {error}
+                        </Alert>
+                    )}
 
-                    <Form.Group className='mb-3'>
-                        <Form.Label>Nombre</Form.Label>
-                        <Form.Control
-                        type='text'
-                        name='nombre'
-                            value={formData.nombre}
-                            onChange={handleChange}
-                            placeholder='Ingrese el nombre completo'
-                            required
-                        />
-                    </Form.Group>
-                    <Form.Group className='mb-3'>
-                        <Form.Label>RUT</Form.Label>
-                        <Form.Control 
-                            type='text'                        
-                            name='rut'
-                            value={formData.rut}
-                            onChange={handleChange}
-                            placeholder='XX.XXX.XXX-X'
-                            required                        
-                        />
-                        <Form.Text className='text-muted'>
-                            Formato: XX.XXX.XXX-X
-                        </Form.Text>
-                    </Form.Group>
+                    <div className="form-section">
+                        <Form.Group className="form-group">
+                            <Form.Label>
+                                <FaUser className="field-icon" /> Nombre
+                            </Form.Label>
+                            <Form.Control
+                                type="text"
+                                name="nombre"
+                                value={formData.nombre}
+                                onChange={handleChange}
+                                placeholder="Ingrese el nombre completo"
+                                className="form-input"
+                                required
+                            />
+                        </Form.Group>
 
-                    <Form.Group className='mb-3'>
-                        <Form.Label>Empresa</Form.Label>
-                        <Form.Select
-                            name='empresa'
-                            value={formData.empresa}
-                            onChange={handleChange}
-                            required
-                        >
-                            <option value="">Seleccione una empresa...</option>
-                            {empresas.map(empresa => (
-                                <option key={empresa.id} value={empresa.id}>
-                                    {empresa.nombre}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </Form.Group>
+                        <Form.Group className="form-group">
+                            <Form.Label>
+                                <FaIdCard className="field-icon" /> RUT
+                            </Form.Label>
+                            <Form.Control
+                                type="text"
+                                name="rut"
+                                value={formData.rut}
+                                onChange={handleChange}
+                                placeholder="XX.XXX.XXX-X"
+                                className="form-input"
+                                required
+                            />
+                            <Form.Text className="text-muted">
+                                Formato: XX.XXX.XXX-X
+                            </Form.Text>
+                        </Form.Group>
 
-                    <Form.Group className='mb-3'>
-                        <Form.Label>Máquinas</Form.Label>
-                        <Form.Select 
-                            multiple
-                            name='maquinas'
-                            value={formData.maquinas}
-                            onChange={handleMachineSelect}
-                            style={{ height: '120px' }}
-                        >
+                        <Form.Group className="form-group">
+                            <Form.Label>
+                                <FaBuilding className="field-icon" /> Empresa
+                            </Form.Label>
+                            <Form.Select
+                                name="empresa"
+                                value={formData.empresa}
+                                onChange={handleChange}
+                                className="form-select"
+                                required
+                            >
+                                <option value="">Seleccione una empresa...</option>
+                                {empresas.map(empresa => (
+                                    <option key={empresa.id} value={empresa.id}>
+                                        {empresa.nombre}
+                                    </option>
+                                ))}
+                            </Form.Select>
+                        </Form.Group>
+                    </div>
+
+                    <div className="machines-section">
+                        <Form.Label className="machines-title">
+                            <FaCog className="field-icon" /> Máquinas Asignadas
+                        </Form.Label>
+                        <div className="machines-container">
                             {machines.map(machine => (
-                                <option key={machine.id} value={machine.id}>
-                                    {machine.codigo_maquina} - {machine.descripcion}
-                                </option>
+                                <div
+                                    key={machine.id}
+                                    className={`machine-item ${formData.maquinas.includes(machine.id) ? 'selected' : ''}`}
+                                    onClick={() => {
+                                        const newMachines = formData.maquinas.includes(machine.id)
+                                            ? formData.maquinas.filter(id => id !== machine.id)
+                                            : [...formData.maquinas, machine.id];
+                                        setFormData(prev => ({ ...prev, maquinas: newMachines }));
+                                    }}
+                                >
+                                    <div className="machine-header">
+                                        <div className="machine-code">{machine.codigo_maquina}</div>
+                                        {formData.maquinas.includes(machine.id) && (
+                                            <div className="selected-indicator">✓</div>
+                                        )}
+                                    </div>
+                                    <div className="machine-desc">{machine.descripcion}</div>
+                                    <div className={`machine-status ${machine.estado_operatividad?.estado === 'OP' ? 'active' : 'inactive'}`}>
+                                        {machine.estado_operatividad?.descripcion || 'No especificado'}
+                                    </div>
+                                </div>
                             ))}
-                        </Form.Select>
-                        <Form.Text className="text-muted">
-                            Mantenga presionado Ctrl para seleccionar múltiples máquinas
+                        </div>
+                        <Form.Text className="text-muted machines-help">
+                            Haga clic en las máquinas para seleccionar/deseleccionar
                         </Form.Text>
-                    </Form.Group>
-                    <Form.Group className="mb-3">
-                        <Form.Check 
-                            type="checkbox"
+                    </div>
+
+                    <Form.Group className="form-group status-group">
+                        <Form.Check
+                            type="switch"
+                            id="operator-status"
                             name="activo"
-                            label="Activo"
+                            label="Operador Activo"
                             checked={formData.activo}
                             onChange={handleChange}
+                            className="status-switch"
                         />
-
                     </Form.Group>
 
-                    {/*Confirmación de eliminación*/}
                     {showDeleteConfirm && operatorToEdit && (
-                        <Alert variant="danger">
+                        <Alert variant="danger" className="delete-alert">
                             <p>¿Está seguro que desea eliminar al operador {operatorToEdit.nombre}?</p>
-                            <div className="d-flex justify-content-end">
+                            <div className="alert-actions">
                                 <Button
-                                    variant="secondary"
+                                    variant="outline-secondary"
                                     size="sm"
                                     onClick={() => setShowDeleteConfirm(false)}
                                     className="me-2"
                                 >
-                                    Cancelar
+                                    <FaTimes className="button-icon" /> Cancelar
                                 </Button>
                                 <Button
                                     variant="danger"
                                     size="sm"
                                     onClick={handleDelete}
-                                >Confirmar Eliminación</Button>
+                                >
+                                    <FaTrash className="button-icon" /> Confirmar
+                                </Button>
                             </div>
                         </Alert>
                     )}
                 </Modal.Body>
                 <Modal.Footer>
-                    <Row className="w-100">
-                        <Col>
-                            {operatorToEdit && (
-                                <Button
-                                    variant="danger"
-                                    onClick={() => setShowDeleteConfirm(true)}
-                                    disabled={loading || showDeleteConfirm}
-                                >Eliminar</Button>
-                            )}
-                        </Col>
-                        <Col className="text-end">
-                            <Button variant="secondary" onClick={handleClose} disabled={loading} className="me-2">
-                                Cancelar
+                    <div className="button-container">
+                        <Button 
+                            variant="danger" 
+                            onClick={() => setShowDeleteConfirm(true)}
+                            disabled={loading || showDeleteConfirm}
+                            className="action-button delete-button"
+                        >
+                            <FaTrash className="button-icon" /> Eliminar
+                        </Button>
+                        <div className="button-group">
+                            <Button 
+                                variant="secondary" 
+                                onClick={handleClose} 
+                                disabled={loading} 
+                                className="action-button cancel-button"
+                            >
+                                <FaTimes className="button-icon" /> Cancelar
                             </Button>
-                            <Button variant="primary" type="submit" disabled={loading}>
-                                {loading ? 'Guardando...' :(operatorToEdit ? 'Actualizar' : 'Crear')}
+                            <Button 
+                                variant="primary" 
+                                type="submit" 
+                                disabled={loading}
+                                className="action-button save-button"
+                            >
+                                <FaSave className="button-icon" />
+                                {loading ? 'Guardando...' : (operatorToEdit ? 'Actualizar' : 'Crear')}
                             </Button>
-                        </Col>
-                    </Row>
+                        </div>
+                    </div>
                 </Modal.Footer>
             </Form>
         </Modal>
-    )
-};
+    );
+}

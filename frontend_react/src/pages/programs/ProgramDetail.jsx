@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link, redirect } from "react-router-dom";
-import { Button, Dropdown, Form } from "react-bootstrap";
+import { Button, Dropdown, Form, Badge, Card, Collapse, Table } from "react-bootstrap";
 import { ReactSortable } from "react-sortablejs";
 import CompNavbar from "../../components/Navbar/CompNavbar";
 import { Footer } from "../../components/Footer/Footer";
@@ -14,6 +14,16 @@ import moment from "moment";
 import { OperadorSelectionModal } from '../../components/Programa/OperadorSelectionModal';
 import { LoadingSpinner } from "../../components/UI/LoadingSpinner/LoadingSpinner";
 import "./ProgramDetail.css";
+import { FaArrowLeft, FaCalendarAlt, FaFlag, FaFilePdf, FaClipboardList, FaExclamationTriangle, FaSave, FaChevronDown } from "react-icons/fa";
+
+const AlertMessage = ({ type, icon, message }) => (
+    <div className={`alert alert-${type} d-flex align-items-center`} role="alert">
+        <div className="alert-icon me-3">
+            {icon}
+        </div>
+        <div>{message}</div>
+    </div>
+);
 
 export function ProgramDetail() {
     const { programId } = useParams();
@@ -689,31 +699,27 @@ export function ProgramDetail() {
     };
 
     const renderOt = (ot) => {
-        // Verificar cambios pendientes solo para esta OT específica
-        const hasPendingChanges = Object.keys(pendingChanges).some(key => {
-            return key.startsWith(`${ot.orden_trabajo}-`);
-        }); 
-
-        if (!ot) return null;
+        const hasPendingChanges = Object.keys(pendingChanges).some(key => 
+            key.startsWith(`${ot.orden_trabajo}-`)
+        );
 
         return (
-            <div
+            <Card 
                 key={ot.orden_trabajo}
-                className="list-group-item"
-                style={{
-                    border: "1.5px solid",
-                    borderRadius: "5px",
-                    backgroundColor: "lavender",
-                    padding: "10px",
-                    textAlign: "center",
-                    marginBottom: "5px",
-                }}
+                className={`ot-card mb-3 ${expandedOTs[ot.orden_trabajo] ? 'expanded' : ''}`}
             >
-                <div className="d-flex justify-content-between align-items-center">
+                <Card.Header className="d-flex justify-content-between align-items-center">
                     <div className="d-flex align-items-center">
-                        <span className="me-3">{ot.orden_trabajo_codigo_ot || "Sin código"}</span>
-                        <span>{ot.orden_trabajo_descripcion_producto_ot || "Sin descripción"}</span>
-                        <span className="ms-3">{ot.orden_trabajo_fecha_termino || "Sin fecha"}</span>
+                        <div className="ot-number me-3">
+                            #{ot.orden_trabajo_codigo_ot}
+                        </div>
+                        <div className="ot-info">
+                            <h6 className="mb-0">{ot.orden_trabajo_descripcion_producto_ot}</h6>
+                            <small className="text-muted">
+                                <FaCalendarAlt className="me-1" />
+                                {ot.orden_trabajo_fecha_termino}
+                            </small>
+                        </div>
                     </div>
                     <div className="d-flex align-items-center">
                         {hasPendingChanges && (
@@ -724,155 +730,162 @@ export function ProgramDetail() {
                                 disabled={savingChanges}
                                 className="me-2"
                             >
+                                <FaSave className="me-1" />
                                 {savingChanges ? "Guardando..." : "Guardar"}
                             </Button>
                         )}
                         <Button
-                            variant="outline-primary"
+                            variant={expandedOTs[ot.orden_trabajo] ? "primary" : "outline-primary"}
                             size="sm"
                             onClick={() => handleToggleExpand(ot.orden_trabajo)}
-                    >
-                            {expandedOTs[ot.orden_trabajo] ? "Ocultar" : "Mostrar"}
+                        >
+                            <FaChevronDown 
+                                className={`transition-transform ${
+                                    expandedOTs[ot.orden_trabajo] ? 'rotate-180' : ''
+                                }`}
+                            />
                         </Button>
                     </div>
-                </div>
-                {/*Contenido expandible */}
-                {expandedOTs[ot.orden_trabajo] && (
-                <div className="mt-3">
-                    <table className="table table-bordered">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Proceso</th>
-                                <th>Máquina</th>
-                                <th>Operador</th>
-                                <th>Cantidad</th>
-                                <th>Estandar</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {ot.procesos?.map((item_ruta) => (
-                                <tr 
-                                    key={item_ruta.id}
-                                    className={!item_ruta.estandar || parseFloat(item_ruta.estandar) === 0 ? "table-danger" : ""}
-                                >
-                                    <td>{item_ruta.item}</td>
-                                    <td>
-                                        <input 
-                                        type="text" 
-                                        className="form-control" 
-                                        value={`${item_ruta.codigo_proceso} - ${item_ruta.descripcion}`}
-                                        disabled
-                                        />
-                                    </td>
-                                    <td>
-                                        <select 
-                                        className="form-control" 
-                                        value={item_ruta.maquina_id || ''}
-                                        onChange={(e) => handleProcessChange(
-                                            ot.orden_trabajo,
-                                            item_ruta.id,
-                                            "maquina_id",
-                                            e.target.value
-                                            
-                                        )}
-                                        onFocus={() => {
-                                            console.log("[Frontend] onFocus del selector de máquinas");
-                                            console.log("[Frontend] item_ruta:", item_ruta);
-                                            console.log("[Frontend] ¿Tiene código de proceso?", !!item_ruta.codigo_proceso);
+                </Card.Header>
 
-                                            //Cargar máquinas cuando el select recibe el foco
-                                            if(!maquinasPorProceso[item_ruta.id]){
-                                                cargarMaquinasPorProceso(item_ruta);
-                                            }
-                                        }}
+                <Collapse in={expandedOTs[ot.orden_trabajo]}>
+                    <Card.Body className="p-0">
+                        <div className="table-responsive">
+                            <Table className="process-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Proceso</th>
+                                        <th>Máquina</th>
+                                        <th>Operador</th>
+                                        <th>Cantidad</th>
+                                        <th>Estandar</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {ot.procesos?.map((item_ruta) => (
+                                        <tr 
+                                            key={item_ruta.id}
+                                            className={!item_ruta.estandar || parseFloat(item_ruta.estandar) === 0 ? "table-danger" : ""}
                                         >
-                                            <option value="">Seleccione una máquina</option>
-                                            {(maquinasPorProceso[item_ruta.id] || maquinas).map(maquina => (
-                                                <option
-                                                    value={maquina.id}
-                                                    key={maquina.id}
-                                                >
-                                                    {maquina.codigo_maquina} - {maquina.descripcion}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </td>
-                                    <td>
-                                        {item_ruta.asignacion ? (
-                                            // Si hay operador asignado, mostrar como texto con botón de edición
-                                            <div className="d-flex align-items-center">
+                                            <td>{item_ruta.item}</td>
+                                            <td>
                                                 <input 
-                                                    type="text" 
-                                                    className="form-control" 
-                                                    value={item_ruta.operador_nombre || 'Sin nombre'}
-                                                    disabled
-                                                    title={item_ruta.asignacion?.fecha_asignacion ? `Asignado el: ${new Date(item_ruta.asignacion.fecha_asignacion).toLocaleString()}` : ''}
+                                                type="text" 
+                                                className="form-control" 
+                                                value={`${item_ruta.codigo_proceso} - ${item_ruta.descripcion}`}
+                                                disabled
                                                 />
-                                                <Button
-                                                    variant="outline-primary"
-                                                    size="sm"
-                                                    onClick={() => openOperadorModal(item_ruta)}
-                                                    title="Cambiar Operador"
-                                                    disabled={!item_ruta.maquina_id}
-                                                >
-                                                    <i className="bi bi-pencil"></i>
-                                                </Button>
-                                            </div>
-                                        ) : (
-                                            // Si no hay operador asignado, mostrar botón para asignar
-                                            <Button
-                                                variant="outline-secondary"
-                                                className="w-100"
-                                                onClick={() => openOperadorModal(item_ruta)}
-                                                disabled={!item_ruta.maquina_id}
-                                            >
-                                                <i className="bi bi-person-plus-fill me-2"></i>
-                                                Asignar Operador
-                                            </Button>
-                                        )}
-                                    </td>
-                                    <td>
-                                        <input 
-                                        type="number" 
-                                        className="form-control"
-                                        value={item_ruta.cantidad} 
-                                        onChange={(e) => handleProcessChange(
-                                            ot.orden_trabajo,
-                                            item_ruta.id,
-                                            'cantidad',
-                                            parseInt(e.target.value, 10)
-                                        )}
-                                        />
-                                    </td>
-                                    <td>
-                                        <Form.Control 
-                                        type="number" 
-                                            value={item_ruta.estandar || 0}
-                                            onChange={(e) => {
-                                                const newValue = parseFloat(e.target.value);
-                                                handleProcessChange(
+                                            </td>
+                                            <td>
+                                                <select 
+                                                className="form-control" 
+                                                value={item_ruta.maquina_id || ''}
+                                                onChange={(e) => handleProcessChange(
                                                     ot.orden_trabajo,
                                                     item_ruta.id,
-                                                    'estandar',
-                                                    parseFloat(e.target.value)
-                                                );
-                                            }}
-                                            min="0"
-                                            step="1"
-                                            className={!item_ruta.estandar || parseFloat(item_ruta.estandar) === 0 ? "border-danger" : ""}
-                                        />
-                                        {(!item_ruta.estandar || parseFloat(item_ruta.estandar) === 0) && 
-                                            <small className="text-danger">Ingrese un estándar mayor a 0</small>
-                                        }
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                )}
-            </div>
+                                                    "maquina_id",
+                                                    e.target.value
+                                                    
+                                                )}
+                                                onFocus={() => {
+                                                    console.log("[Frontend] onFocus del selector de máquinas");
+                                                    console.log("[Frontend] item_ruta:", item_ruta);
+                                                    console.log("[Frontend] ¿Tiene código de proceso?", !!item_ruta.codigo_proceso);
+
+                                                    //Cargar máquinas cuando el select recibe el foco
+                                                    if(!maquinasPorProceso[item_ruta.id]){
+                                                        cargarMaquinasPorProceso(item_ruta);
+                                                    }
+                                                }}
+                                                >
+                                                    <option value="">Seleccione una máquina</option>
+                                                    {(maquinasPorProceso[item_ruta.id] || maquinas).map(maquina => (
+                                                        <option
+                                                            value={maquina.id}
+                                                            key={maquina.id}
+                                                        >
+                                                            {maquina.codigo_maquina} - {maquina.descripcion}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </td>
+                                            <td>
+                                                {item_ruta.asignacion ? (
+                                                    // Si hay operador asignado, mostrar como texto con botón de edición
+                                                    <div className="d-flex align-items-center">
+                                                        <input 
+                                                            type="text" 
+                                                            className="form-control" 
+                                                            value={item_ruta.operador_nombre || 'Sin nombre'}
+                                                            disabled
+                                                            title={item_ruta.asignacion?.fecha_asignacion ? `Asignado el: ${new Date(item_ruta.asignacion.fecha_asignacion).toLocaleString()}` : ''}
+                                                        />
+                                                        <Button
+                                                            variant="outline-primary"
+                                                            size="sm"
+                                                            onClick={() => openOperadorModal(item_ruta)}
+                                                            title="Cambiar Operador"
+                                                            disabled={!item_ruta.maquina_id}
+                                                        >
+                                                            <i className="bi bi-pencil"></i>
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    // Si no hay operador asignado, mostrar botón para asignar
+                                                    <Button
+                                                        variant="outline-secondary"
+                                                        className="w-100"
+                                                        onClick={() => openOperadorModal(item_ruta)}
+                                                        disabled={!item_ruta.maquina_id}
+                                                    >
+                                                        <i className="bi bi-person-plus-fill me-2"></i>
+                                                        Asignar Operador
+                                                    </Button>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <input 
+                                                type="number" 
+                                                className="form-control"
+                                                value={item_ruta.cantidad} 
+                                                onChange={(e) => handleProcessChange(
+                                                    ot.orden_trabajo,
+                                                    item_ruta.id,
+                                                    'cantidad',
+                                                    parseInt(e.target.value, 10)
+                                                )}
+                                                />
+                                            </td>
+                                            <td>
+                                                <Form.Control 
+                                                type="number" 
+                                                    value={item_ruta.estandar || 0}
+                                                    onChange={(e) => {
+                                                        const newValue = parseFloat(e.target.value);
+                                                        handleProcessChange(
+                                                            ot.orden_trabajo,
+                                                            item_ruta.id,
+                                                            'estandar',
+                                                            parseFloat(e.target.value)
+                                                        );
+                                                    }}
+                                                    min="0"
+                                                    step="1"
+                                                    className={!item_ruta.estandar || parseFloat(item_ruta.estandar) === 0 ? "border-danger" : ""}
+                                                />
+                                                {(!item_ruta.estandar || parseFloat(item_ruta.estandar) === 0) && 
+                                                    <small className="text-danger">Ingrese un estándar mayor a 0</small>
+                                                }
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </Table>
+                        </div>
+                    </Card.Body>
+                </Collapse>
+            </Card>
         )
     };
         
@@ -881,173 +894,162 @@ export function ProgramDetail() {
     if (!programData) return <p>No se encontró el programa.</p>;
 
     return (
-        <div>
+        <div className="page-container">
             <CompNavbar />
-            <br />
-            <div className="container">
-                <div className="d-flex justify-content-between">
-                    <Link to="/programs" className="btn btn-primary">
-                        Volver a Programas
-                    </Link>
-                </div>
-                <h1 className="display-4 text-center mb-4">
-                    Detalles del Programa: {programData?.nombre}
-                </h1>
-                <span className="d-flex justify-content-evenly">
-                    <p>Fecha Inicio: {programData?.fecha_inicio}</p>
-                    <p>Fecha Término: {programData?.fecha_fin}</p>
-                </span>
-                <section
-                    className="container-section container-fluid border py-2 mb-2"
-                    style={{ borderRadius: "5px" }}
-                >
-                    <h2>Órdenes de Trabajo:</h2>
-                    {hayProcesosConEstandarCero() && (
-                        <div className="alert alert-warning" role="alert">
-                            <i className="bi bi-exclamation-triangle-fill me-2"></i>
-                            Hay procesos con estándar en 0. Por favor, ingrese un valor válido para poder proyectar en la carta.
+            <div className="content-wrapper">
+                <div className="container">
+                    <div className="program-header">
+                        <div className="d-flex justify-content-between align-items-center mb-4">
+                            <div>
+                                <Link to="/programs" className="btn btn-outline-primary">
+                                    <FaArrowLeft className="me-2" />
+                                    Volver a Programas
+                                </Link>
+                            </div>
+                            <div className="text-center">
+                                <h1 className="h3 mb-2">{programData?.nombre}</h1>
+                                <div className="program-dates">
+                                    <Badge bg="info" className="me-3">
+                                        <FaCalendarAlt className="me-2" />
+                                        Inicio: {programData?.fecha_inicio}
+                                    </Badge>
+                                    <Badge bg="info">
+                                        <FaFlag className="me-2" />
+                                        Término: {programData?.fecha_fin}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="action-buttons">
+                                <Button 
+                                    variant="outline-success" 
+                                    className="me-2"
+                                    onClick={() => generateProgramPDF(programId)}
+                                >
+                                    <FaFilePdf className="me-2" />
+                                    PDF
+                                </Button>
+                                <Button 
+                                    variant="outline-info"
+                                    onClick={() => navigate(`/programs/${programId}/supervisor-report`)}
+                                >
+                                    <FaClipboardList className="me-2" />
+                                    Reporte
+                                </Button>
+                            </div>
                         </div>
-                    )}
-
-                    {showPendingChangesAlert && Object.keys(pendingChanges).length > 0 && (
-                        <div className="alert alert-info" role="alert">
-                            <i className="bi bi-info-circle-fill me-2"></i>
-                            Hay cambios pendientes por guardar. Por favor, guarde los cambios antes de salir de la página.
-                        </div>
-                    )}
-                    
-                    <div>
-                        {otList && otList.length > 0 ? (
-                            <ReactSortable
-                                list={otList}
-                                setList={setOtList}
-                                onEnd={(evt) => {
-                                    const newOtList = [...otList];
-                                    const movedItem = newOtList.splice(evt.oldIndex, 1)[0];
-                                    newOtList.splice(evt.newIndex, 0, movedItem);
-                                    handleOtReorder(newOtList);
-                                }}
-                            >
-                                {otList.map((ot) => renderOt(ot))}
-                            </ReactSortable>
-                        ) : (
-                            <p>No hay OTs asignadas a este programa.</p>
-                        )}
                     </div>
-                    <Button 
-                    variant="success" 
-                    onClick={toggleTimeline} 
-                    className="mt-3" 
-                    disabled={timelineLoading}
-                    title = {hayProcesosConEstandarCero() ? "No se puede proyectar: Hay procesos con estándar en 0": ""}
+
+                    <section
+                        className="container-section container-fluid border py-2 mb-2"
+                        style={{ borderRadius: "5px" }}
                     >
-                        {timelineLoading
-                            ? 
-                                <span>
-                                    <LoadingSpinner message="" size="small"/> Cargando Proyección
-                                </span>
-                            : showTimeline
-                            ? "Ocultar Proyección"
-                            : hayProcesosConEstandarCero()
-                                ? "Proyectar (Corregir estándares en OTs)"
-                                : "Proyectar"}
-                    </Button>
-                    <Button 
-                    variant="primary" 
-                    onClick={async() => {
-                        try{
-                            await generateProgramPDF(programId);
-                            toast.success("PDF generando correctamente");
-                        }catch(error){
-                            toast.error("Error detallado al generar el PDF", error);
+                        <h2>Órdenes de Trabajo:</h2>
+                        {hayProcesosConEstandarCero() && (
+                            <AlertMessage
+                                type="warning"
+                                icon={<FaExclamationTriangle size={20} />}
+                                message="Hay procesos con estándar en 0. Por favor, ingrese un valor válido para poder proyectar en la carta."
+                            />
+                        )}
 
-                            //Mostrar mensaje más específico según el tipo error
-                            if (error.response){
-                                //El servidor respondió con un código de error
-                                if (error.response.data instanceof Blob){
-                                    // Si la respuesta es un blob, intentar leerlo como texto
-                                    const text = await error.response.data.text();
-                                    try {
-                                        const errorData = JSON.parse(text);
-                                        toast.error(`Error al generar PDF: ${errorData.detail || errorData.message || "Error del servidor"}`);
-                                    } catch (e) {
-                                        toast.error(`Error al generar PDF: ${text.substring(0, 100)}`);
-                                    }
-                                } else {
-                                    toast.error(`Error al generar PDF: ${error.response.data?.detail || error.response.statusText}`);
-                                }
-                            } else if (error.request) {
-                                //La solicitud se hizo pero no se recibió respuesta
-                                toast.error("No se recibió respuesta del servidor al generar el PDF");
-                            } else {
-                                //Error en la configuración de la solicitud
-                                toast.error(`Error al configurar la solicitud: ${error.message}`);
-                            }
-                        }
-                    }} 
-                    className="mt-3 me-2">
-                        Generar PDF
-                    </Button>
-                    {/* Nuevo botón para Reporte Supervisor */}
-                    <Button 
-                        variant="info" 
-                        onClick={() => navigate(`/programs/${programId}/supervisor-report`)}
-                        className="mt-3">
-                        Reporte Supervisor
-                    </Button>
-                </section>
+                        {showPendingChangesAlert && Object.keys(pendingChanges).length > 0 && (
+                            <div className="alert alert-info" role="alert">
+                                <i className="bi bi-info-circle-fill me-2"></i>
+                                Hay cambios pendientes por guardar. Por favor, guarde los cambios antes de salir de la página.
+                            </div>
+                        )}
+                        
+                        <div>
+                            {otList && otList.length > 0 ? (
+                                <ReactSortable
+                                    list={otList}
+                                    setList={setOtList}
+                                    onEnd={(evt) => {
+                                        const newOtList = [...otList];
+                                        const movedItem = newOtList.splice(evt.oldIndex, 1)[0];
+                                        newOtList.splice(evt.newIndex, 0, movedItem);
+                                        handleOtReorder(newOtList);
+                                    }}
+                                >
+                                    {otList.map((ot) => renderOt(ot))}
+                                </ReactSortable>
+                            ) : (
+                                <p>No hay OTs asignadas a este programa.</p>
+                            )}
+                        </div>
+                        <Button 
+                        variant="success" 
+                        onClick={toggleTimeline} 
+                        className="mt-3" 
+                        disabled={timelineLoading}
+                        title = {hayProcesosConEstandarCero() ? "No se puede proyectar: Hay procesos con estándar en 0": ""}
+                        >
+                            {timelineLoading
+                                ? 
+                                    <span>
+                                        <LoadingSpinner message="" size="small"/> Cargando Proyección
+                                    </span>
+                                : showTimeline
+                                ? "Ocultar Proyección"
+                                : hayProcesosConEstandarCero()
+                                    ? "Proyectar (Corregir estándares en OTs)"
+                                    : "Proyectar"}
+                        </Button>
+                    </section>
 
-                {showTimeline && (
-                    <div className="timeline-container mt-4 mb-4" style={{ width: "100%" }}>
-                        <Timeline
-                            groups={timelineGroups}
-                            items={timelineItems}
-                            defaultTimeStart={moment().startOf('day').toDate()}
-                            defaultTimeEnd={moment().add(14, 'days').toDate()}
-                            lineHeight={50}
-                            sidebarWidth={200}
-                            canMove={false}
-                            canResize={false}
-                            timeSteps={{
-                                second: 1,
-                                minute: 30,
-                                hour: 1,
-                                day: 1,
-                                month: 1,
-                                year: 1
-                            }}
-                            traditionalZoom={true}
-                            timeFormat="%H:%M"
-                            showCursorLine
-                            itemRenderer={({ item, itemContext, getItemProps }) => {
-                                const { left: leftResizer, right: rightResizer } = itemContext.dimensions;
-                                return (
-                                    <div
-                                        {...getItemProps({
-                                            style: {
-                                                ...item.itemProps.style,
-                                                left: leftResizer,
-                                                width: rightResizer - leftResizer,
-                                                position: 'absolute',
-                                                height: '100%'
-                                            }
-                                        })}
-                                        title={item.itemProps['data-tooltip']}
-                                    >
-                                        <div className="timeline-item-content">
-                                            {item.title}
+                    {showTimeline && (
+                        <div className="timeline-container mt-4 mb-4" style={{ width: "100%" }}>
+                            <Timeline
+                                groups={timelineGroups}
+                                items={timelineItems}
+                                defaultTimeStart={moment().startOf('day').toDate()}
+                                defaultTimeEnd={moment().add(14, 'days').toDate()}
+                                lineHeight={50}
+                                sidebarWidth={200}
+                                canMove={false}
+                                canResize={false}
+                                timeSteps={{
+                                    second: 1,
+                                    minute: 30,
+                                    hour: 1,
+                                    day: 1,
+                                    month: 1,
+                                    year: 1
+                                }}
+                                traditionalZoom={true}
+                                timeFormat="%H:%M"
+                                showCursorLine
+                                itemRenderer={({ item, itemContext, getItemProps }) => {
+                                    const { left: leftResizer, right: rightResizer } = itemContext.dimensions;
+                                    return (
+                                        <div
+                                            {...getItemProps({
+                                                style: {
+                                                    ...item.itemProps.style,
+                                                    left: leftResizer,
+                                                    width: rightResizer - leftResizer,
+                                                    position: 'absolute',
+                                                    height: '100%'
+                                                }
+                                            })}
+                                            title={item.itemProps['data-tooltip']}
+                                        >
+                                            <div className="timeline-item-content">
+                                                {item.title}
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            }}
-                            dayBackground={date => {
-                                const hours = date.getHours();
-                                return hours === 13 ? '#f8d7da' : null;
-                            }}
-                        />
-                    </div>
-                )}
+                                    );
+                                }}
+                                dayBackground={date => {
+                                    const hours = date.getHours();
+                                    return hours === 13 ? '#f8d7da' : null;
+                                }}
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
+            <Footer />
 
             {/* Modal de selección de operador */}
             <OperadorSelectionModal
@@ -1058,8 +1060,6 @@ export function ProgramDetail() {
                 currentOperadorId={currentProceso?.operador_id}
                 onSelect={(operadorId) => handleOperadorChange(currentProceso, operadorId)}
             />
-
-            <Footer/>
         </div>
     );
 }

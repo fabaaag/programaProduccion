@@ -127,19 +127,30 @@ class LoginView(APIView):
 class ProfileView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
-    serializer_class  = UserProfileSerializer
+    serializer_class = UserProfileSerializer
 
     def get(self, request):
-        print("Headers recibidos:", request.headers)
-        print("Usuario autenticado:", request.user)
         serializer = self.serializer_class(request.user)
         return Response(serializer.data)
     
     def put(self, request):
         serializer = self.serializer_class(request.user, data=request.data, partial=True)
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
+            user = serializer.save()
+            
+            # Si se cambió la contraseña, actualizar el token
+            if 'new_password' in request.data:
+                refresh = RefreshToken.for_user(user)
+                return Response({
+                    'token': str(refresh.access_token),
+                    'refresh': str(refresh),
+                    'message': 'Perfil actualizado exitosamente'
+                })
+            
+            return Response({
+                'message': 'Perfil actualizado exitosamente',
+                **serializer.data
+            })
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 
